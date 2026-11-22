@@ -45,7 +45,13 @@ class CroquisWorkbench(Gui.Workbench):
         pass
 
     def Deactivated(self):
-        pass
+        # Drawing boards live only in this workbench: leaving it saves and
+        # closes them, the sheets stay in the scene as image planes
+        try:
+            from . import sheet
+            sheet.close_all_boards()
+        except Exception as exc:
+            App.Console.PrintError("Croquis: boards not closed (%s)\n" % exc)
 
     def ContextMenu(self, recipient):
         if recipient == "Tree":

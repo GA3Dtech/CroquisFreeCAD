@@ -258,6 +258,7 @@ def store(obj, data):
 #  Drawing board (GUI)
 # ----------------------------------------------------------------------
 _boards = {}    # (document name, object name) -> QMdiSubWindow
+WORKBENCH = "CroquisWorkbench"
 
 
 def _key(obj):
@@ -270,6 +271,11 @@ def open_board(obj):
     import FreeCADGui as Gui
     from .qt import QtCore, QtGui, QtWidgets
     from .canvas.view import SheetBoard
+
+    # The board belongs to the Croquis workbench: leaving the workbench
+    # closes it (init_gui.CroquisWorkbench.Deactivated)
+    if Gui.activeWorkbench().name() != WORKBENCH:
+        Gui.activateWorkbench(WORKBENCH)
 
     key = _key(obj)
     sub = _boards.get(key)
@@ -314,7 +320,26 @@ def open_board(obj):
 def close_board(obj, save=True):
     """Close the board of a sheet if it is open (without saving when the
     sheet is being deleted)."""
-    sub = _boards.pop(_key(obj), None)
+    _close(_key(obj), save)
+
+
+def close_all_boards():
+    """Close every board, saving the strokes, and come back to the 3D view:
+    outside the Croquis workbench a sheet is just its image plane."""
+    docs = set()
+    for key in list(_boards):
+        docs.add(key[0])
+        _close(key, True)
+    import FreeCADGui as Gui
+    for name in docs:
+        try:
+            Gui.getDocument(name).activateView("Gui::View3DInventor")
+        except Exception:
+            pass
+
+
+def _close(key, save):
+    sub = _boards.pop(key, None)
     if sub is None:
         return
     try:
