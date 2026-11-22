@@ -1,0 +1,238 @@
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Croquis - brushes
+# Copyright (C) 2026 GA3Dtech
+#
+# This library is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or (at
+# your option) any later version.
+#
+# This library is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public
+# License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this library; if not, see <https://www.gnu.org/licenses/>.
+"""
+brushes.py (Croquis) - draws one stroke into its own image.
+
+Every stroke is drawn in a separate buffer with CompositionMode_Source:
+each short segment REPLACES the pixels under it instead of blending with
+them, so a stroke never darkens where it crosses itself or where its round
+caps overlap. The stroke opacity and the blend mode (multiply for markers)
+are applied only when the finished buffer is laid on its layer
+(compositor.py): two marker strokes darken each other, one stroke does not.
+That is the difference between an alcohol marker and a transparent brush.
+
+Pressure drives the width and the opacity of each segment, in the share
+given by the tool preset (model.TOOLS). Graphite tools then get a paper
+grain (DestinationIn with a noise texture anchored to the sheet).
+"""
+
+import math
+import random
+
+from ..qt import QtCore, QtGui
+from .. import model
+from . import stroke_geom as geom
+
+# Grain texture size in pixels, and the resolution it was designed for
+# (it is scaled so the grain keeps the same size in millimetres)
+GRAIN_SIZE = 256
+GRAIN_DPI = 150.0
+
+_grain_cache = {}
+
+
+def tool_params(tool):
+    return model.TOOLS.get(tool, model.TOOLS["pencil"])
+
+
+def point_style(pressure, size_px, params):
+    """(width px, alpha 0..1) of the stroke at a point."""
+    pw = params["pressure_width"]
+    pa = params["pressure_alpha"]
+    w = size_px * (1.0 - pw + pw * pressure)
+    a = 1.0 - pa + pa * pressure
+    return max(w, 0.5), geom.clamp(a)
+
+
+class StrokeRaster(object):
+    """Draws a stroke span by span (one span = between two input points)
+    into `image`, whose pixel (0, 0) is at sheet pixel `origin`. Used live
+    while the pen moves (draw_to() with the spans already complete) and for
+    the final render (all spans)."""
+
+    def __init__(self, image, origin, stroke, scale):
+        self.image = image
+        self.ox, self.oy = origin
+        self.stroke = stroke
+        self.scale = scale
+        self.params = tool_params(stroke.tool)
+        self.size_px = stroke.size * scale
+        self.color = QtGui.QColor(stroke.color)
+        # Sampling step: about one pixel, coarser for wide markers
+        self.step_mm = max(0.8, self.size_px / 10.0) / scale
+        self.done = 0           # spans already drawn
+        self.last = None        # last sample drawn (px, py, w, a)
+
+    def _sample(self, p):
+        x = p[0] * self.scale - self.ox
+        y = p[1] * self.scale - self.oy
+        w, a = point_style(p[2], self.size_px, self.params)
+        return x, y, w, a
+
+    def _painter(self):
+        painter = QtGui.QPainter(self.image)
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
+        return painter
+
+    def _segment(self, painter, s0, s1, rect):
+        w = 0.5 * (s0[2] + s1[2])
+        a = 0.5 * (s0[3] + s1[3])
+        c = QtGui.QColor(self.color)
+        c.setAlphaF(a)
+        pen = QtGui.QPen(c, w, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap,
+                         QtCore.Qt.RoundJoin)
+        painter.setPen(pen)
+        painter.drawLine(QtCore.QPointF(s0[0], s0[1]), QtCore.QPointF(s1[0], s1[1]))
+        m = w * 0.5 + 2.0
+        r = QtCore.QRectF(min(s0[0], s1[0]) - m, min(s0[1], s1[1]) - m,
+                          abs(s1[0] - s0[0]) + 2 * m, abs(s1[1] - s0[1]) + 2 * m)
+        return r if rect is None else rect.united(r)
+
+    def draw_to(self, spans):
+        """Draw spans self.done .. spans-1. Returns the dirty rectangle in
+        image pixels (QRectF) or None."""
+        pts = self.stroke.points
+        spans = min(spans, len(pts) - 1)
+        if spans <= self.done:
+            return None
+        rect = None
+        painter = self._painter()
+        try:
+            for i in range(self.done, spans):
+                for p in geom.catmull_rom_span(pts, i, self.step_mm):
+                    s = self._sample(p)
+                    if self.last is not None:
+                        rect = self._segment(painter, self.last, s, rect)
+                    self.last = s
+            self.done = spans
+            if spans == len(pts) - 1:
+                # stroke complete: close it on its true last point
+                s = self._sample(pts[-1])
+                if self.last is not None:
+                    rect = self._segment(painter, self.last, s, rect)
+                self.last = s
+        finally:
+            painter.end()
+        return rect
+
+    def draw_dot(self):
+        """A single click: one round dot."""
+        s = self._sample(self.stroke.points[0])
+        painter = self._painter()
+        try:
+            c = QtGui.QColor(self.color)
+            c.setAlphaF(s[3])
+            painter.setPen(QtCore.Qt.NoPen)
+            painter.setBrush(c)
+            painter.drawEllipse(QtCore.QPointF(s[0], s[1]), s[2] * 0.5, s[2] * 0.5)
+        finally:
+            painter.end()
+        m = s[2] * 0.5 + 2.0
+        return QtCore.QRectF(s[0] - m, s[1] - m, 2 * m, 2 * m)
+
+
+# ----------------------------------------------------------------------
+#  Grain
+# ----------------------------------------------------------------------
+def grain_texture(strength):
+    """Tileable noise image whose alpha is 1 - strength * noise (cached)."""
+    key = round(strength, 2)
+    img = _grain_cache.get(key)
+    if img is not None:
+        return img
+    n = GRAIN_SIZE
+    try:
+        import numpy as np
+        rng = np.random.default_rng(7)
+        v = rng.random((n, n))
+        # light tileable blur, then more contrast: graphite catches the
+        # top of the paper fibres
+        v = (v + np.roll(v, 1, 0) + np.roll(v, -1, 0)
+             + np.roll(v, 1, 1) + np.roll(v, -1, 1)) / 5.0
+        v = (v - v.min()) / max(v.max() - v.min(), 1e-6)
+        v = v ** 1.6
+        a = np.clip(255.0 * (1.0 - strength * v), 0, 255).astype(np.uint8)
+        data = np.repeat(a[:, :, None], 4, axis=2).tobytes()
+    except ImportError:
+        rnd = random.Random(7)
+        data = bytearray()
+        for _ in range(n * n):
+            a = int(255 * (1.0 - strength * rnd.random() ** 1.6))
+            data.extend((a, a, a, a))
+        data = bytes(data)
+    img = QtGui.QImage(data, n, n, 4 * n,
+                       QtGui.QImage.Format_ARGB32_Premultiplied).copy()
+    _grain_cache[key] = img
+    return img
+
+
+def apply_grain(image, origin, strength, scale):
+    """Multiply the alpha of `image` by the grain texture, anchored to the
+    sheet (not to the stroke) so overlapping strokes share the same paper."""
+    if strength <= 0:
+        return
+    brush = QtGui.QBrush(grain_texture(strength))
+    k = scale / (GRAIN_DPI / 25.4)
+    t = QtGui.QTransform()
+    t.translate(-origin[0], -origin[1])
+    t.scale(k, k)
+    brush.setTransform(t)
+    painter = QtGui.QPainter(image)
+    try:
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_DestinationIn)
+        painter.fillRect(image.rect(), brush)
+    finally:
+        painter.end()
+
+
+# ----------------------------------------------------------------------
+#  Whole stroke
+# ----------------------------------------------------------------------
+def stroke_pixel_rect(stroke, scale, limit=None):
+    """Integer pixel rectangle covering the stroke (QRect), clipped to
+    `limit` (QRect) when given. None when empty."""
+    b = stroke.bounds()
+    if b is None:
+        return None
+    x0 = int(math.floor(b[0] * scale)) - 2
+    y0 = int(math.floor(b[1] * scale)) - 2
+    x1 = int(math.ceil(b[2] * scale)) + 2
+    y1 = int(math.ceil(b[3] * scale)) + 2
+    r = QtCore.QRect(x0, y0, x1 - x0, y1 - y0)
+    if limit is not None:
+        r = r.intersected(limit)
+    return r if r.isValid() and not r.isEmpty() else None
+
+
+def render_stroke(stroke, scale, limit=None):
+    """(QImage, QPoint) of the finished stroke at full opacity, the point
+    being its position in sheet pixels; None when nothing is visible."""
+    r = stroke_pixel_rect(stroke, scale, limit)
+    if r is None:
+        return None
+    img = QtGui.QImage(r.width(), r.height(), QtGui.QImage.Format_ARGB32_Premultiplied)
+    img.fill(0)
+    origin = (r.x(), r.y())
+    raster = StrokeRaster(img, origin, stroke, scale)
+    if len(stroke.points) == 1:
+        raster.draw_dot()
+    else:
+        raster.draw_to(len(stroke.points) - 1)
+    apply_grain(img, origin, raster.params["grain"], scale)
+    return img, r.topLeft()
