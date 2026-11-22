@@ -4,7 +4,7 @@ spline strokes, rendered as translucent image planes."""
 
 import os
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 ICON_DIR = os.path.join(PACKAGE_DIR, "resources", "icons")

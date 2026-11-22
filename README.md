@@ -19,21 +19,20 @@ Two main uses:
 
 ## Status
 
-Version 0.1 (in development).
+Version 0.2.
 
 | Feature | State |
 |---|---|
-| Drawing board in a FreeCAD tab (zoom, pan, fit) | done |
-| Mechanical pencil (pressure → opacity, graphite grain) | done |
+| Drawing board in a FreeCAD tab (zoom, pan, fit), closed when leaving the workbench | done |
+| Mechanical pencil, grease pencil (pressure fills the grain), white highlight | done |
 | Alcohol marker (multiply, no self-darkening within a stroke) | done |
-| Tablet pressure, pressure simulated from mouse speed | done |
-| Undo / redo per stroke | done |
-| Sheet stored in the document, linked image plane on XY / XZ / YZ | done |
-| Double-click to edit, image regenerated on close | done |
-| Transparent PNG export | done |
-| Tapered spline stroke, grease pencil, layer panel, papers | v0.2 |
+| Straight line and tapered spline stroke (freehand fitted, or control points), editable | done |
+| Eraser: soft (pixels) or whole strokes, on all layers or one | done |
+| Paper (transparent, white, layout pad, tinted grey, kraft) and layer visibility / opacity | done |
+| Tablet pressure, pressure simulated from mouse speed, undo / redo | done |
+| Sheet stored in the document, linked image plane on XY / XZ / YZ, PNG export | done |
 | 3D view capture as underlay, camera-aligned plane, ellipses, perspective grids | v0.3 |
-| SVG export, TechDraw, chisel tip | v0.4 |
+| SVG export, TechDraw, chisel tip, custom palettes | v0.4 |
 
 The full design (in French) is in [docs/specification_fr.md](docs/specification_fr.md).
 
@@ -53,22 +52,44 @@ Requires FreeCAD 1.0 or newer (Qt5 or Qt6).
 | Command | What it does |
 |---|---|
 | **New sketch sheet** | Choose a format, resolution, paper and plane; creates a `Croquis` sheet and its image plane, and opens the drawing board. |
-| **Edit sketch sheet** | Reopens the drawing board of the selected sheet (or double-click the sheet in the tree). |
+| **Edit sketch sheet** | Reopens the drawing board of the selected sheet (or double-click the sheet in the tree, from any workbench). |
 | **Export sheet as PNG** | Saves the selected sheet as a PNG (transparent where the paper is transparent). |
 
-In the drawing board:
+The drawing board belongs to the Croquis workbench: switching to another
+workbench writes the strokes into the document and closes it. The sheet then
+stays in the scene as a plain image plane, to be used like any imported
+picture.
+
+### Tools
+
+| Key | Tool | Layer | Notes |
+|---|---|---|---|
+| `P` | Mechanical pencil | Construction | Pressure drives the opacity, light graphite grain. |
+| `G` | Grease pencil | Lines | Pressure drives width and density; a light touch shows the paper grain. |
+| `M` | Alcohol marker | Marker | Multiply: overlapping strokes darken, a stroke never darkens itself. |
+| `W` | White highlight | Highlights | For reflections, best on tinted paper. |
+| `L` | Straight line | Lines | Tapered vector line, drag from end to end; `Shift` snaps to 15°. |
+| `S` | Spline stroke | Lines | Thin, wide in the middle, pointed. *Freehand* is smoothed into Bezier curves; *Control points*: click the points, click the last one again (or double-click, `Enter`, right-click) to finish, `Backspace` removes the last point, `Esc` cancels. |
+| `E` | Eraser | All or one | *Soft* removes pixels; *Whole strokes* deletes every stroke it touches. |
+| `V` | Edit vector strokes | – | Click a line or spline: drag its anchors, handles or the whole stroke; colour, size, opacity and width profile apply to it; `Delete` removes it. |
+
+With the raster tools, `Shift` at the press draws a straight line. Line and
+spline strokes have a width profile: position of the widest point, start
+taper and end taper (0 % blunt, 100 % pointed).
 
 | Input | Action |
 |---|---|
-| `P` / `M` | Mechanical pencil / alcohol marker |
 | `[` / `]` | Smaller / larger tool |
 | `Ctrl+Z`, `Ctrl+Shift+Z` / `Ctrl+Y` | Undo / redo |
 | Mouse wheel | Zoom around the cursor |
 | Middle button drag, or `Space` + drag | Pan |
 | `F` | Fit the sheet in the window |
 
-Closing the board writes the strokes into the document and regenerates the
-image plane (one undo step in FreeCAD).
+The side panel sets the paper and the visibility and opacity of each layer
+(Highlights, Lines, Marker, Construction, top to bottom).
+
+Closing the board (or *Update 3D*) writes the strokes into the document and
+regenerates the image plane, as one undo step in FreeCAD.
 
 ## Translations
 

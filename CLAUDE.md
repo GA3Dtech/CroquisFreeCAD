@@ -13,10 +13,11 @@ by a linked `Image::ImagePlane`. Read `README.md` first; the full design
 | `freecad/croquis/commands.py` | Gui commands (thin wrappers) |
 | `freecad/croquis/model.py` | Pure data: formats, papers, layers, tool presets, `Stroke`, `SheetData` (JSON) — no Qt, no FreeCAD |
 | `freecad/croquis/sheet.py` | `Croquis::Sheet` FeaturePython + ViewProvider, linked ImagePlane, PNG regeneration |
-| `freecad/croquis/render/stroke_geom.py` | Pure geometry: input smoothing, pressure from speed, resampling |
-| `freecad/croquis/render/brushes.py` | Draws one stroke into a QImage (pencil, marker) |
-| `freecad/croquis/render/compositor.py` | Layer caches, blend modes, paper, full / partial composite, PNG export |
-| `freecad/croquis/canvas/view.py` | Drawing widget (tablet / mouse input, zoom, pan) and the MDI board window |
+| `freecad/croquis/render/stroke_geom.py` | Pure geometry: input smoothing, pressure from speed, Catmull-Rom, Schneider Bezier fitting, width profile, hit testing |
+| `freecad/croquis/render/brushes.py` | Draws one stroke into a QImage (raster brushes, vector strokes as dense pseudo strokes, grain) |
+| `freecad/croquis/render/compositor.py` | Layer caches, erasers (DestinationOut), hidden strokes, blend modes, paper, partial composite, PNG export |
+| `freecad/croquis/canvas/view.py` | SheetCanvas (input devices, zoom, pan, shortcuts, painting) and SheetBoard (toolbar, tool options, paper / layers panel) |
+| `freecad/croquis/canvas/tools.py` | One object per tool: brushes, straight line, spline, erasers, vector edit |
 | `freecad/croquis/canvas/undo.py` | QUndoStack commands at stroke level |
 | `freecad/croquis/i18n.py` | `tr()` and language selection |
 | `freecad/croquis/prefs.py` | All settings (`get`/`put`) and the preference page |
@@ -51,6 +52,14 @@ FreeCAD restart.
   stroke is drawn in its own buffer with `CompositionMode_Source` (no
   accumulation inside the stroke), then composited on its layer with the tool
   opacity and the layer blend mode (multiply for markers).
+- Vector strokes (`kind == "vector"`) store a Bezier chain in `points`
+  (P0 C1 C2 P1 ..., pressure unused) and their width profile in `params`.
+  Raster strokes store input points (x, y, pressure).
+- The drawing board belongs to the Croquis workbench: `Deactivated` closes
+  (and saves) every board; `open_board` switches to the workbench.
+- The canvas takes its keys (tool letters, Delete, Esc, Enter, Ctrl+Z...)
+  through `ShortcutOverride`, otherwise FreeCAD's global shortcuts fire
+  (Delete would delete document objects). Add new keys to `_OWN_KEYS`.
 - Settings: always through `prefs.get()` / `prefs.put()` (keys in
   `prefs.DEFAULTS`), and expose new ones on the preference page.
 - Translations: after changing texts run `python3 tools/i18n.py update`, fill
