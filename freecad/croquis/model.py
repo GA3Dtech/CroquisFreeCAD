@@ -71,13 +71,21 @@ LAYERS = [
 ]
 LAYER_KEYS = [k for k, _l, _b in LAYERS]
 
+# Layers the eraser can work on (layer "*" of an eraser stroke = all of them)
+ERASABLE_LAYERS = ["construction", "marker", "lines", "highlights"]
+ALL_LAYERS = "*"
+
 # Drawing tools and their defaults. Sizes in mm.
+#   kind: "raster" (pressure brush), "vector" (tapered Bezier stroke whose
+#         width follows a profile), "eraser" (raster, removes pixels)
 #   pressure_width: share of the width driven by pressure (0 = constant)
 #   pressure_alpha: share of the opacity driven by pressure
 #   grain: strength of the paper grain showing through (0 = solid)
+#   grain_pressure: how much a hard press fills the grain (0 = never)
 TOOLS = {
     "pencil": {
         "label": N_("Mechanical pencil"),
+        "kind": "raster",
         "layer": "construction",
         "color": "#262626",
         "size": 0.45,
@@ -85,9 +93,23 @@ TOOLS = {
         "pressure_width": 0.3,
         "pressure_alpha": 0.85,
         "grain": 0.45,
+        "grain_pressure": 0.3,
+    },
+    "grease": {
+        "label": N_("Grease pencil"),
+        "kind": "raster",
+        "layer": "lines",
+        "color": "#1b1b1b",
+        "size": 1.3,
+        "opacity": 0.95,
+        "pressure_width": 0.6,
+        "pressure_alpha": 0.5,
+        "grain": 0.9,
+        "grain_pressure": 0.85,
     },
     "marker": {
         "label": N_("Alcohol marker"),
+        "kind": "raster",
         "layer": "marker",
         "color": "#b7bcc0",
         "size": 4.0,
@@ -95,9 +117,72 @@ TOOLS = {
         "pressure_width": 0.35,
         "pressure_alpha": 0.0,
         "grain": 0.0,
+        "grain_pressure": 0.0,
+    },
+    "highlight": {
+        "label": N_("White highlight"),
+        "kind": "raster",
+        "layer": "highlights",
+        "color": "#ffffff",
+        "size": 1.2,
+        "opacity": 0.9,
+        "pressure_width": 0.4,
+        "pressure_alpha": 0.7,
+        "grain": 0.35,
+        "grain_pressure": 0.6,
+    },
+    "line": {
+        "label": N_("Straight line"),
+        "kind": "vector",
+        "layer": "lines",
+        "color": "#1b1b1d",
+        "size": 0.9,
+        "opacity": 1.0,
+        "pressure_width": 1.0,
+        "pressure_alpha": 0.0,
+        "grain": 0.0,
+        "grain_pressure": 0.0,
+    },
+    "spline": {
+        "label": N_("Spline stroke"),
+        "kind": "vector",
+        "layer": "lines",
+        "color": "#1b1b1d",
+        "size": 1.2,
+        "opacity": 1.0,
+        "pressure_width": 1.0,
+        "pressure_alpha": 0.0,
+        "grain": 0.0,
+        "grain_pressure": 0.0,
+    },
+    "eraser": {
+        "label": N_("Eraser"),
+        "kind": "eraser",
+        "layer": ALL_LAYERS,
+        "color": "#000000",
+        "size": 5.0,
+        "opacity": 1.0,
+        "pressure_width": 0.5,
+        "pressure_alpha": 0.3,
+        "grain": 0.0,
+        "grain_pressure": 0.0,
     },
 }
-TOOL_KEYS = ["pencil", "marker"]
+TOOL_KEYS = ["pencil", "grease", "marker", "highlight", "line", "spline", "eraser"]
+
+# Width profile of vector strokes (stroke.params):
+#   peak: position of the widest point along the stroke (0..1)
+#   tin / tout: taper at the start / end (0 = blunt, 1 = pointed)
+DEFAULT_PROFILE = {"peak": 0.45, "tin": 1.0, "tout": 1.0}
+
+
+def tool_kind(tool):
+    return TOOLS.get(tool, TOOLS["pencil"])["kind"]
+
+
+def eraser_targets(stroke):
+    """Layers an eraser stroke works on."""
+    return list(ERASABLE_LAYERS) if stroke.layer == ALL_LAYERS else [stroke.layer]
 
 
 def format_size(key):
@@ -160,15 +245,31 @@ class Stroke(object):
     """One gesture: a tool, its settings at the time, and the input points
     (x mm, y mm, pressure 0..1)."""
 
-    __slots__ = ("tool", "color", "size", "opacity", "layer", "points")
+    __slots__ = ("tool", "color", "size", "opacity", "layer", "points", "params")
 
-    def __init__(self, tool, color, size, opacity, layer, points=None):
+    def __init__(self, tool, color, size, opacity, layer, points=None, params=None):
         self.tool = tool
         self.color = color
         self.size = float(size)
         self.opacity = float(opacity)
         self.layer = layer
+        # vector strokes: Bezier control points P0 C1 C2 P1 C1 C2 P2 ...
+        # (pressure unused), raster strokes: input points
         self.points = points if points is not None else []
+        self.params = dict(params) if params else {}
+
+    @property
+    def kind(self):
+        return tool_kind(self.tool)
+
+    def copy(self):
+        return Stroke(self.tool, self.color, self.size, self.opacity, self.layer,
+                      list(self.points), self.params)
+
+    def profile(self):
+        p = dict(DEFAULT_PROFILE)
+        p.update(self.params)
+        return p
 
     def bounds(self):
         """(xmin, ymin, xmax, ymax) in mm, grown by the stroke width."""
@@ -183,15 +284,18 @@ class Stroke(object):
         flat = []
         for x, y, p in self.points:
             flat.extend((round(x, 2), round(y, 2), round(p, 3)))
-        return {"t": self.tool, "c": self.color, "s": round(self.size, 3),
-                "o": round(self.opacity, 3), "l": self.layer, "p": flat}
+        d = {"t": self.tool, "c": self.color, "s": round(self.size, 3),
+             "o": round(self.opacity, 3), "l": self.layer, "p": flat}
+        if self.params:
+            d["q"] = self.params
+        return d
 
     @classmethod
     def from_dict(cls, d):
         flat = d.get("p", [])
         pts = [(flat[i], flat[i + 1], flat[i + 2]) for i in range(0, len(flat) - 2, 3)]
         return cls(d.get("t", "pencil"), d.get("c", "#000000"), d.get("s", 1.0),
-                   d.get("o", 1.0), d.get("l", "lines"), pts)
+                   d.get("o", 1.0), d.get("l", "lines"), pts, d.get("q"))
 
 
 class SheetData(object):
@@ -216,7 +320,10 @@ class SheetData(object):
         return max(1, int(round(self.width * s))), max(1, int(round(self.height * s)))
 
     def layer_strokes(self, layer):
-        return [s for s in self.strokes if s.layer == layer]
+        """Strokes painted on a layer, in order, erasers working on it
+        included."""
+        return [s for s in self.strokes
+                if s.layer == layer or (s.layer == ALL_LAYERS and layer in ERASABLE_LAYERS)]
 
     # --- serialization
     def to_json(self):

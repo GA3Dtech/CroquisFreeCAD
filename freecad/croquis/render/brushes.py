@@ -28,7 +28,12 @@ That is the difference between an alcohol marker and a transparent brush.
 
 Pressure drives the width and the opacity of each segment, in the share
 given by the tool preset (model.TOOLS). Graphite tools then get a paper
-grain (DestinationIn with a noise texture anchored to the sheet).
+grain anchored to the sheet; a hard press fills the grain (grain_pressure),
+a light one only catches the top of the paper fibres.
+
+Vector strokes (line, spline) are sampled along their Bezier chain into a
+dense pseudo stroke whose "pressure" is the width profile, then drawn by
+the same segment code at the target resolution: sharp at any scale.
 """
 
 import math
@@ -150,45 +155,88 @@ class StrokeRaster(object):
 # ----------------------------------------------------------------------
 #  Grain
 # ----------------------------------------------------------------------
+_noise = []
+
+
+def _noise_array():
+    """Tileable noise (numpy, GRAIN_SIZE², values 0..1), or None without
+    numpy."""
+    if _noise:
+        return _noise[0]
+    try:
+        import numpy as np
+    except ImportError:
+        _noise.append(None)
+        return None
+    n = GRAIN_SIZE
+    rng = np.random.default_rng(7)
+    v = rng.random((n, n))
+    # light tileable blur, then more contrast: graphite catches the top of
+    # the paper fibres
+    v = (v + np.roll(v, 1, 0) + np.roll(v, -1, 0)
+         + np.roll(v, 1, 1) + np.roll(v, -1, 1)) / 5.0
+    v = (v - v.min()) / max(v.max() - v.min(), 1e-6)
+    _noise.append(v ** 1.6)
+    return _noise[0]
+
+
 def grain_texture(strength):
-    """Tileable noise image whose alpha is 1 - strength * noise (cached)."""
+    """Tileable image whose alpha is 1 - strength * noise (cached); used
+    when numpy is missing."""
     key = round(strength, 2)
     img = _grain_cache.get(key)
     if img is not None:
         return img
     n = GRAIN_SIZE
-    try:
-        import numpy as np
-        rng = np.random.default_rng(7)
-        v = rng.random((n, n))
-        # light tileable blur, then more contrast: graphite catches the
-        # top of the paper fibres
-        v = (v + np.roll(v, 1, 0) + np.roll(v, -1, 0)
-             + np.roll(v, 1, 1) + np.roll(v, -1, 1)) / 5.0
-        v = (v - v.min()) / max(v.max() - v.min(), 1e-6)
-        v = v ** 1.6
-        a = np.clip(255.0 * (1.0 - strength * v), 0, 255).astype(np.uint8)
-        data = np.repeat(a[:, :, None], 4, axis=2).tobytes()
-    except ImportError:
-        rnd = random.Random(7)
-        data = bytearray()
-        for _ in range(n * n):
-            a = int(255 * (1.0 - strength * rnd.random() ** 1.6))
-            data.extend((a, a, a, a))
-        data = bytes(data)
-    img = QtGui.QImage(data, n, n, 4 * n,
+    rnd = random.Random(7)
+    data = bytearray()
+    for _ in range(n * n):
+        a = int(255 * (1.0 - strength * rnd.random() ** 1.6))
+        data.extend((a, a, a, a))
+    img = QtGui.QImage(bytes(data), n, n, 4 * n,
                        QtGui.QImage.Format_ARGB32_Premultiplied).copy()
     _grain_cache[key] = img
     return img
 
 
-def apply_grain(image, origin, strength, scale):
-    """Multiply the alpha of `image` by the grain texture, anchored to the
-    sheet (not to the stroke) so overlapping strokes share the same paper."""
+def _image_array(img):
+    """Copy of an ARGB32 QImage as a numpy array (h, w, 4), or None."""
+    import numpy as np
+    w, h, bpl = img.width(), img.height(), img.bytesPerLine()
+    ptr = img.constBits()
+    if hasattr(ptr, "setsize"):
+        ptr.setsize(h * bpl)
+    buf = np.frombuffer(ptr, np.uint8, count=h * bpl)
+    return buf.reshape(h, bpl)[:, :w * 4].reshape(h, w, 4).copy()
+
+
+def apply_grain(image, origin, strength, scale, pressure_fill=0.0):
+    """Paper grain on a stroke image, anchored to the sheet (not to the
+    stroke) so overlapping strokes share the same paper. Where the stroke
+    is dense (alpha near 1) `pressure_fill` closes the grain. Returns the
+    resulting image (may be a new one)."""
     if strength <= 0:
-        return
-    brush = QtGui.QBrush(grain_texture(strength))
+        return image
     k = scale / (GRAIN_DPI / 25.4)
+    noise = _noise_array()
+    if noise is not None:
+        try:
+            import numpy as np
+            arr = _image_array(image).astype(np.float32)
+            h, w = arr.shape[:2]
+            n = noise.shape[0]
+            ty = (np.floor((np.arange(h) + origin[1]) / k).astype(np.int64)) % n
+            tx = (np.floor((np.arange(w) + origin[0]) / k).astype(np.int64)) % n
+            nz = noise[np.ix_(ty, tx)]
+            a = arr[:, :, 3] / 255.0
+            f = 1.0 - strength * nz * (1.0 - pressure_fill * a * a)
+            arr *= f[:, :, None]
+            data = np.clip(arr, 0, 255).astype(np.uint8).tobytes()
+            return QtGui.QImage(data, w, h, 4 * w,
+                                QtGui.QImage.Format_ARGB32_Premultiplied).copy()
+        except Exception:
+            pass        # fall back on the Qt path below
+    brush = QtGui.QBrush(grain_texture(strength))
     t = QtGui.QTransform()
     t.translate(-origin[0], -origin[1])
     t.scale(k, k)
@@ -199,6 +247,32 @@ def apply_grain(image, origin, strength, scale):
         painter.fillRect(image.rect(), brush)
     finally:
         painter.end()
+    return image
+
+
+# ----------------------------------------------------------------------
+#  Vector strokes
+# ----------------------------------------------------------------------
+def chain_of(stroke):
+    return [(p[0], p[1]) for p in stroke.points]
+
+
+def vector_pseudo_stroke(stroke, scale):
+    """Raster stroke equivalent to a vector stroke at a resolution: points
+    about one pixel apart, "pressure" = width profile."""
+    prof = stroke.profile()
+    step = max(0.6, stroke.size * scale / 12.0) / scale
+    pts = [(x, y, geom.profile_width(t, prof["peak"], prof["tin"], prof["tout"]))
+           for x, y, t in geom.sample_chain(chain_of(stroke), step)]
+    return model.Stroke(stroke.tool, stroke.color, stroke.size, stroke.opacity,
+                        stroke.layer, pts)
+
+
+def stroke_polyline(stroke, scale=10.0):
+    """Points along the visible path of any stroke (for hit testing), in mm."""
+    if stroke.kind == "vector":
+        return geom.sample_chain(chain_of(stroke), 1.0 / scale * 4)
+    return stroke.points
 
 
 # ----------------------------------------------------------------------
@@ -229,10 +303,12 @@ def render_stroke(stroke, scale, limit=None):
     img = QtGui.QImage(r.width(), r.height(), QtGui.QImage.Format_ARGB32_Premultiplied)
     img.fill(0)
     origin = (r.x(), r.y())
-    raster = StrokeRaster(img, origin, stroke, scale)
-    if len(stroke.points) == 1:
+    drawn = vector_pseudo_stroke(stroke, scale) if stroke.kind == "vector" else stroke
+    raster = StrokeRaster(img, origin, drawn, scale)
+    if len(drawn.points) == 1:
         raster.draw_dot()
     else:
-        raster.draw_to(len(stroke.points) - 1)
-    apply_grain(img, origin, raster.params["grain"], scale)
+        raster.draw_to(len(drawn.points) - 1)
+    params = raster.params
+    img = apply_grain(img, origin, params["grain"], scale, params.get("grain_pressure", 0.0))
     return img, r.topLeft()

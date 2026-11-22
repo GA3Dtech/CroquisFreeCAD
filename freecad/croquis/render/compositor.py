@@ -25,6 +25,10 @@ on large sheets; removing one (undo) repaints its layer.
 
 Composition, bottom to top: paper colour (nothing for a transparent sheet),
 then every visible layer with its opacity and blend mode (model.LAYERS).
+
+Eraser strokes are painted with DestinationOut on the layers they work on,
+in stroke order: they remove what was drawn before them, not after.
+`hidden` holds strokes left out while the board edits or erases them.
 """
 
 from ..qt import QtCore, QtGui
@@ -58,6 +62,7 @@ class Compositor(object):
         self.h = max(1, int(round(sheet.height * self.scale)))
         self.bounds = QtCore.QRect(0, 0, self.w, self.h)
         self.layers = {}
+        self.hidden = set()     # id() of strokes not painted
         self.underlay = None    # QImage stretched over the sheet (v0.3)
         self.image = new_image(self.w, self.h)
         self.rebuild()
@@ -69,31 +74,82 @@ class Compositor(object):
             img = self.layers[key] = new_image(self.w, self.h)
         return img
 
-    def _paint_stroke(self, stroke):
-        """Lay one stroke on its layer. Returns the covered QRect or None."""
+    def stroke_layers(self, stroke):
+        if stroke.kind == "eraser":
+            return model.eraser_targets(stroke)
+        return [stroke.layer]
+
+    def _paint_stroke(self, stroke, only=None):
+        """Lay one stroke on its layer(s) (`only`: that layer only).
+        Returns the covered QRect or None."""
+        if id(stroke) in self.hidden:
+            return None
+        if stroke.kind == "eraser":
+            targets = [k for k in model.eraser_targets(stroke)
+                       if self.layers.get(k) is not None and (only is None or k == only)]
+            if not targets:
+                return None
         res = brushes.render_stroke(stroke, self.scale, self.bounds)
         if res is None:
             return None
         img, pos = res
-        painter = QtGui.QPainter(self._layer(stroke.layer))
+        if stroke.kind == "eraser":
+            for k in targets:
+                self.erase(k, img, pos, stroke.opacity)
+        else:
+            painter = QtGui.QPainter(self._layer(stroke.layer))
+            try:
+                painter.setOpacity(stroke.opacity)
+                painter.setCompositionMode(blend_mode(model.layer_blend(stroke.layer)))
+                painter.drawImage(pos, img)
+            finally:
+                painter.end()
+        return QtCore.QRect(pos, img.size())
+
+    def erase(self, key, img, pos, opacity=1.0, source_rect=None):
+        """Remove the alpha of `img` (placed at `pos`) from a layer."""
+        layer = self.layers.get(key)
+        if layer is None:
+            return
+        painter = QtGui.QPainter(layer)
         try:
-            painter.setOpacity(stroke.opacity)
-            painter.setCompositionMode(blend_mode(model.layer_blend(stroke.layer)))
-            painter.drawImage(pos, img)
+            painter.setOpacity(opacity)
+            painter.setCompositionMode(QtGui.QPainter.CompositionMode_DestinationOut)
+            if source_rect is None:
+                painter.drawImage(pos, img)
+            else:
+                painter.drawImage(pos, img, source_rect)
         finally:
             painter.end()
-        return QtCore.QRect(pos, img.size())
 
     def rebuild_layer(self, key):
         self.layers.pop(key, None)
         for s in self.sheet.layer_strokes(key):
-            self._paint_stroke(s)
+            self._paint_stroke(s, only=key)
 
     def rebuild(self):
         self.layers = {}
         for s in self.sheet.strokes:
             self._paint_stroke(s)
         self.compose()
+
+    def refresh_strokes(self, strokes):
+        """Repaint the layers of `strokes` (added, removed, hidden or
+        changed) and recompose their area. Returns the dirty QRect."""
+        keys = []
+        rect = None
+        for st in strokes:
+            for k in self.stroke_layers(st):
+                if k not in keys:
+                    keys.append(k)
+            r = brushes.stroke_pixel_rect(st, self.scale, self.bounds)
+            if r is not None:
+                rect = r if rect is None else rect.united(r)
+        for k in keys:
+            self.rebuild_layer(k)
+        if rect is not None:
+            self.compose(rect)
+        return rect
 
     # --- edits
     def add_stroke(self, stroke):
@@ -105,12 +161,8 @@ class Compositor(object):
         return r
 
     def remove_stroke(self, stroke):
-        """The stroke was removed from the sheet: repaint its layer."""
-        r = brushes.stroke_pixel_rect(stroke, self.scale, self.bounds)
-        self.rebuild_layer(stroke.layer)
-        if r is not None:
-            self.compose(r)
-        return r
+        """The stroke was removed from the sheet: repaint its layer(s)."""
+        return self.refresh_strokes([stroke])
 
     # --- composition
     def compose(self, rect=None):
