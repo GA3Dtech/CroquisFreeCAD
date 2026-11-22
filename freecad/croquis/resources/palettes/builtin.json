@@ -1,0 +1,177 @@
+{
+ "_comment": "Built-in marker palettes. name: English (translated at display). colors: [label, #rrggbb].",
+ "palettes": [
+  {
+   "order": 1,
+   "name": "Cool greys",
+   "colors": [
+    [
+     "C0",
+     "#eceff3"
+    ],
+    [
+     "C1",
+     "#d8dbdf"
+    ],
+    [
+     "C2",
+     "#c3c7cc"
+    ],
+    [
+     "C3",
+     "#afb3b8"
+    ],
+    [
+     "C4",
+     "#9b9fa5"
+    ],
+    [
+     "C5",
+     "#868b91"
+    ],
+    [
+     "C6",
+     "#72777d"
+    ],
+    [
+     "C7",
+     "#5f6369"
+    ],
+    [
+     "C8",
+     "#4b5055"
+    ],
+    [
+     "C9",
+     "#383c40"
+    ]
+   ]
+  },
+  {
+   "order": 2,
+   "name": "Warm greys",
+   "colors": [
+    [
+     "W0",
+     "#f3f0ed"
+    ],
+    [
+     "W1",
+     "#dfddd9"
+    ],
+    [
+     "W2",
+     "#ccc9c4"
+    ],
+    [
+     "W3",
+     "#b8b5b0"
+    ],
+    [
+     "W4",
+     "#a5a19c"
+    ],
+    [
+     "W5",
+     "#918d87"
+    ],
+    [
+     "W6",
+     "#7d7a73"
+    ],
+    [
+     "W7",
+     "#696660"
+    ],
+    [
+     "W8",
+     "#55524c"
+    ],
+    [
+     "W9",
+     "#403e39"
+    ]
+   ]
+  },
+  {
+   "order": 3,
+   "name": "Neutral greys",
+   "colors": [
+    [
+     "N0",
+     "#f0f0f0"
+    ],
+    [
+     "N1",
+     "#dcdcdc"
+    ],
+    [
+     "N2",
+     "#c8c8c8"
+    ],
+    [
+     "N3",
+     "#b4b4b4"
+    ],
+    [
+     "N4",
+     "#a0a0a0"
+    ],
+    [
+     "N5",
+     "#8c8c8c"
+    ],
+    [
+     "N6",
+     "#787878"
+    ],
+    [
+     "N7",
+     "#646464"
+    ],
+    [
+     "N8",
+     "#515151"
+    ],
+    [
+     "N9",
+     "#3d3d3d"
+    ]
+   ]
+  },
+  {
+   "order": 4,
+   "name": "Accents",
+   "colors": [
+    [
+     "Red",
+     "#d2453b"
+    ],
+    [
+     "Orange",
+     "#e8893a"
+    ],
+    [
+     "Ochre",
+     "#d9b35a"
+    ],
+    [
+     "Green",
+     "#6aa27a"
+    ],
+    [
+     "Blue",
+     "#4f86c6"
+    ],
+    [
+     "Ink black",
+     "#1b1b1d"
+    ],
+    [
+     "White",
+     "#ffffff"
+    ]
+   ]
+  }
+ ]
+}
