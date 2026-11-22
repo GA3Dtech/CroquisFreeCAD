@@ -66,3 +66,67 @@ class ClearSheet(QUndoCommand):
         self.canvas.sheet.strokes = list(self.saved)
         self.canvas.compositor.rebuild()
         self.canvas.sheet_changed(None)
+
+
+class RemoveStrokes(QUndoCommand):
+    """Delete strokes (stroke eraser, Delete key in the edit tool)."""
+
+    def __init__(self, canvas, strokes):
+        QUndoCommand.__init__(self, tr("Erase strokes"))
+        self.canvas = canvas
+        self.strokes = list(strokes)
+        self.removed = []       # (index, stroke) in increasing index order
+
+    def redo(self):
+        sheet = self.canvas.sheet
+        ids = set(id(s) for s in self.strokes)
+        self.removed = [(i, s) for i, s in enumerate(sheet.strokes) if id(s) in ids]
+        sheet.strokes = [s for s in sheet.strokes if id(s) not in ids]
+        self.canvas.strokes_removed(self.strokes)
+        self.canvas.sheet_changed(self.canvas.compositor.refresh_strokes(self.strokes))
+
+    def undo(self):
+        strokes = self.canvas.sheet.strokes
+        # increasing order: each index is valid once the previous ones are back
+        for i, s in self.removed:
+            strokes.insert(min(i, len(strokes)), s)
+        self.canvas.sheet_changed(self.canvas.compositor.refresh_strokes(self.strokes))
+
+
+class ReplaceStroke(QUndoCommand):
+    """Swap a stroke for an edited copy. Consecutive edits of the same
+    setting (`merge_key`, e.g. dragging a spin box) merge into one step."""
+
+    MERGE_ID = 4242
+
+    def __init__(self, canvas, old, new, merge_key=None):
+        QUndoCommand.__init__(self, tr("Edit stroke"))
+        self.canvas = canvas
+        self.old = old
+        self.new = new
+        self.merge_key = merge_key
+
+    def _swap(self, a, b):
+        strokes = self.canvas.sheet.strokes
+        for i in range(len(strokes)):
+            if strokes[i] is a:
+                strokes[i] = b
+                break
+        self.canvas.stroke_replaced(a, b)
+        self.canvas.sheet_changed(self.canvas.compositor.refresh_strokes([a, b]))
+
+    def redo(self):
+        self._swap(self.old, self.new)
+
+    def undo(self):
+        self._swap(self.new, self.old)
+
+    def id(self):
+        return self.MERGE_ID if self.merge_key else -1
+
+    def mergeWith(self, other):
+        if not isinstance(other, ReplaceStroke) or other.merge_key != self.merge_key \
+                or other.old is not self.new:
+            return False
+        self.new = other.new
+        return True

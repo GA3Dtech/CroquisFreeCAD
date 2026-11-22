@@ -21,17 +21,13 @@ so sketching does not fight with the 3D camera.
 
 SheetCanvas is a plain QWidget (not a QGraphicsView): it gets tablet events
 directly, and paints the compositor image through its own zoom / pan
-transform, only inside the region Qt asks to repaint.
+transform, only inside the region Qt asks to repaint. It owns navigation
+(zoom, pan, fit), the input devices and the shortcuts; what the pen does is
+up to the active tool (tools.py).
 
-While the pen moves, the stroke grows in a "live" buffer the size of the
-sheet (brushes.StrokeRaster, span by span, one input point behind so the
-curve can be interpolated). On release, the live buffer is cleared and the
-stroke is pushed on the undo stack, which paints its final version (with
-grain and end tapers) through the compositor.
+SheetBoard wraps the canvas with the toolbar, the tool options and the
+paper / layers panel.
 """
-
-import math
-import time
 
 from ..qt import (QtCore, QtGui, QtWidgets, QUndoStack, QAction, QActionGroup,
                   event_pos)
@@ -41,6 +37,7 @@ from ..render import compositor as comp_mod
 from ..render import brushes
 from ..render import stroke_geom as geom
 from . import undo
+from . import tools
 
 ZOOM_MIN = 0.03
 ZOOM_MAX = 16.0
@@ -48,11 +45,26 @@ SIZE_MIN = 0.05     # mm
 SIZE_MAX = 60.0
 BACKGROUND = QtGui.QColor(88, 90, 94)
 
+# Tool keys of the board, toolbar order: key, icon, shortcut
+BOARD_TOOLS = [
+    ("pencil", "Pencil.svg", QtCore.Qt.Key_P),
+    ("grease", "Grease.svg", QtCore.Qt.Key_G),
+    ("marker", "Marker.svg", QtCore.Qt.Key_M),
+    ("highlight", "Highlight.svg", QtCore.Qt.Key_W),
+    ("line", "Line.svg", QtCore.Qt.Key_L),
+    ("spline", "Spline.svg", QtCore.Qt.Key_S),
+    ("eraser", "Eraser.svg", QtCore.Qt.Key_E),
+    ("edit", "EditStroke.svg", QtCore.Qt.Key_V),
+]
+_TOOL_KEYS = dict((int(k), t) for t, _i, k in BOARD_TOOLS)
+
 # Keys handled by the canvas even if FreeCAD has a shortcut on them
-_OWN_KEYS = set(int(k) for k in (
-    QtCore.Qt.Key_P, QtCore.Qt.Key_M, QtCore.Qt.Key_F, QtCore.Qt.Key_Space,
+# (Delete would delete the selected document objects, Ctrl+Z undo in 3D)
+_OWN_KEYS = set(_TOOL_KEYS) | set(int(k) for k in (
+    QtCore.Qt.Key_F, QtCore.Qt.Key_Space,
     QtCore.Qt.Key_BracketLeft, QtCore.Qt.Key_BracketRight,
-    QtCore.Qt.Key_Z, QtCore.Qt.Key_Y))
+    QtCore.Qt.Key_Z, QtCore.Qt.Key_Y, QtCore.Qt.Key_Delete, QtCore.Qt.Key_Backspace,
+    QtCore.Qt.Key_Escape, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter))
 
 
 def _checker_brush():
@@ -71,35 +83,51 @@ def _key_code(event):
     return int(event.key())
 
 
+def tool_label(key):
+    if key == "edit":
+        return tr("Edit vector strokes")
+    return tr_data(model.TOOLS[key]["label"])
+
+
+def default_settings():
+    """Initial settings of every board tool."""
+    out = {}
+    for k, t in model.TOOLS.items():
+        st = {"color": t["color"], "size": t["size"], "opacity": t["opacity"]}
+        if t["kind"] == "vector":
+            st.update(model.DEFAULT_PROFILE)
+        out[k] = st
+    out["line"]["tin"] = 0.6
+    out["spline"]["mode"] = "freehand"
+    out["eraser"]["mode"] = "soft"
+    out["eraser"]["target"] = model.ALL_LAYERS
+    return out
+
+
 class SheetCanvas(QtWidgets.QWidget):
     """Zoomable drawing surface of one sheet."""
 
     toolChanged = QtCore.Signal(str)
     settingsChanged = QtCore.Signal()
     zoomChanged = QtCore.Signal(float)
+    sheetEdited = QtCore.Signal()       # paper / layer settings (not undoable)
 
     def __init__(self, sheet, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         self.sheet = sheet
         self.compositor = comp_mod.Compositor(sheet)
         self.undo_stack = QUndoStack(self)
-        self.tool_settings = dict(
-            (k, {"color": t["color"], "size": t["size"], "opacity": t["opacity"]})
-            for k, t in model.TOOLS.items())
+        self.tool_settings = default_settings()
         self.tool = "pencil"
+        self.handler = tools.make_tool(self, self.tool)
         self.zoom = 1.0
         self.offset = QtCore.QPointF(0, 0)
         self._fitted = False
         self._checker = _checker_brush()
-        # stroke in progress
-        self._stroke = None
-        self._raster = None
         self._live_img = None
-        self._input = None          # "tablet" / "mouse" while drawing
-        self._stab = None
-        self._speed = None
+        self._region = None         # repaint region of the paint in progress
+        self._input = None          # "tablet" / "mouse" while a button is down
         self._curve = 1.0
-        self._raw_last = None
         # navigation
         self._pan = None
         self._space = False
@@ -124,6 +152,16 @@ class SheetCanvas(QtWidgets.QWidget):
     def to_sheet_px(self, pos):
         return QtCore.QPointF((pos.x() - self.offset.x()) / self.zoom,
                               (pos.y() - self.offset.y()) / self.zoom)
+
+    def to_mm(self, pos):
+        """Widget position -> sheet millimetres (x, y)."""
+        s = self.to_sheet_px(pos)
+        return s.x() / self.scale, s.y() / self.scale
+
+    def to_widget(self, p):
+        """Sheet millimetres (x, y, ...) -> widget position (QPointF)."""
+        k = self.scale * self.zoom
+        return QtCore.QPointF(p[0] * k + self.offset.x(), p[1] * k + self.offset.y())
 
     def to_widget_rect(self, r):
         """Sheet pixel rectangle -> widget rectangle (QRect, grown a bit)."""
@@ -159,37 +197,102 @@ class SheetCanvas(QtWidgets.QWidget):
         self.update()
         self.zoomChanged.emit(self.zoom)
 
+    def live_buffer(self):
+        """Sheet-sized transparent image the raster tools draw into."""
+        c = self.compositor
+        if self._live_img is None or self._live_img.width() != c.w \
+                or self._live_img.height() != c.h:
+            self._live_img = comp_mod.new_image(c.w, c.h)
+        return self._live_img
+
     # ------------------------------------------------------------------
-    #  Tool settings
+    #  Tools and their settings
     # ------------------------------------------------------------------
+    def set_tool(self, key):
+        if key == self.tool:
+            return
+        self.handler.cancel()
+        self.tool = key
+        self.handler = tools.make_tool(self, key)
+        self.toolChanged.emit(key)
+        self.settingsChanged.emit()
+        self.update()
+
+    def reset_tool(self):
+        """Rebuild the tool object after a mode change (eraser)."""
+        self.handler.cancel()
+        self.handler = tools.make_tool(self, self.tool)
+        self.update()
+
+    def selection(self):
+        return getattr(self.handler, "selection", None)
+
     def current(self):
+        """Settings shown in the toolbar: those of the selected stroke in
+        the edit tool, else those of the tool."""
+        sel = self.selection()
+        if sel is not None:
+            d = {"color": sel.color, "size": sel.size, "opacity": sel.opacity}
+            d.update(sel.profile())
+            return d
+        if self.tool == "edit":
+            return dict(self.tool_settings["spline"])
         return self.tool_settings[self.tool]
 
-    def set_tool(self, key):
-        if key not in self.tool_settings or key == self.tool:
-            return
-        self.tool = key
-        self.toolChanged.emit(key)
+    def _set(self, name, value):
+        sel = self.selection()
+        if sel is not None:
+            new = sel.copy()
+            if name in model.DEFAULT_PROFILE:
+                new.params[name] = value
+            else:
+                setattr(new, name, value)
+            self.undo_stack.push(undo.ReplaceStroke(self, sel, new, merge_key=name))
+        elif self.tool != "edit":
+            self.tool_settings[self.tool][name] = value
         self.settingsChanged.emit()
         self._update_hover(self._hover)
 
     def set_color(self, color):
-        self.current()["color"] = color
-        self.settingsChanged.emit()
+        self._set("color", color)
 
     def set_size(self, size):
         size = min(max(float(size), SIZE_MIN), SIZE_MAX)
         if abs(size - self.current()["size"]) > 1e-9:
-            self.current()["size"] = size
-            self.settingsChanged.emit()
-            self._update_hover(self._hover)
+            self._set("size", size)
 
     def set_opacity(self, opacity):
-        self.current()["opacity"] = min(max(float(opacity), 0.01), 1.0)
-        self.settingsChanged.emit()
+        self._set("opacity", min(max(float(opacity), 0.01), 1.0))
+
+    def set_profile(self, name, value):
+        self._set(name, float(value))
+
+    def set_option(self, name, value):
+        """Tool option that is not a stroke property (spline mode, eraser
+        mode and target)."""
+        self.tool_settings[self.tool][name] = value
+        if name == "mode":
+            self.reset_tool()
+
+    # --- paper and layers (saved with the sheet, not undoable)
+    def set_paper(self, key):
+        self.sheet.paper = key
+        self.compositor.compose()
+        self.update()
+        self.sheetEdited.emit()
+
+    def set_layer(self, key, visible=None, opacity=None):
+        info = self.sheet.layers[key]
+        if visible is not None:
+            info["visible"] = bool(visible)
+        if opacity is not None:
+            info["opacity"] = float(opacity)
+        self.compositor.compose()
+        self.update()
+        self.sheetEdited.emit()
 
     # ------------------------------------------------------------------
-    #  Repaint hook (undo commands)
+    #  Hooks for undo commands and tools
     # ------------------------------------------------------------------
     def sheet_changed(self, rect):
         if rect is None:
@@ -197,40 +300,84 @@ class SheetCanvas(QtWidgets.QWidget):
         else:
             self.update(self.to_widget_rect(rect))
 
+    def strokes_removed(self, strokes):
+        if self.selection() in strokes:
+            self.handler.select(None)
+
+    def stroke_replaced(self, old, new):
+        if self.selection() is old:
+            self.handler.selection = new
+            self.update()
+
+    def selection_changed(self):
+        self.settingsChanged.emit()
+
     def clear_sheet(self):
         if self.sheet.strokes:
+            self.handler.cancel()
+            if self.selection() is not None:
+                self.handler.select(None)
             self.undo_stack.push(undo.ClearSheet(self))
+
+    def cancel_stroke(self):
+        self.handler.cancel()
+
+    def pick_stroke(self, pos, kinds=None):
+        """Topmost visible stroke under the widget position (or None)."""
+        x, y = self.to_mm(pos)
+        tol = tools.PICK_PX / (self.scale * self.zoom)
+        for s in reversed(self.sheet.strokes):
+            if kinds is not None and s.kind not in kinds:
+                continue
+            if s.kind == "eraser" or not self.sheet.layers[s.layer]["visible"]:
+                continue
+            b = s.bounds()
+            if b is None or not (b[0] - tol <= x <= b[2] + tol and b[1] - tol <= y <= b[3] + tol):
+                continue
+            if geom.distance_to_polyline(brushes.stroke_polyline(s), x, y) \
+                    <= max(s.size / 2.0, tol):
+                return s
+        return None
 
     # ------------------------------------------------------------------
     #  Painting
     # ------------------------------------------------------------------
+    def draw_image(self, p, img, pos, opacity=1.0, blend="normal"):
+        """Paint an image placed at sheet pixel `pos` (QPoint), only its
+        part inside the region being repainted."""
+        z = self.zoom
+        target = QtCore.QRectF(pos.x() * z + self.offset.x(), pos.y() * z + self.offset.y(),
+                               img.width() * z, img.height() * z)
+        visible = target.intersected(self._region) if self._region is not None else target
+        if visible.isEmpty():
+            return
+        src = QtCore.QRectF((visible.x() - target.x()) / z, (visible.y() - target.y()) / z,
+                            visible.width() / z, visible.height() / z)
+        p.setOpacity(opacity)
+        p.setCompositionMode(comp_mod.blend_mode(blend))
+        p.drawImage(visible, img, src)
+        p.setOpacity(1.0)
+        p.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
+
     def paintEvent(self, event):
         p = QtGui.QPainter(self)
         try:
             region = QtCore.QRectF(event.rect())
             p.fillRect(region, BACKGROUND)
             target = self.sheet_rect_widget()
-            visible = region.intersected(target)
-            if not visible.isEmpty():
+            self._region = region.intersected(target)
+            if not self._region.isEmpty():
                 if model.paper_color(self.sheet.paper) is None:
-                    p.fillRect(visible, self._checker)
-                # source rectangle in sheet pixels of the visible part
-                z = self.zoom
-                src = QtCore.QRectF((visible.x() - self.offset.x()) / z,
-                                    (visible.y() - self.offset.y()) / z,
-                                    visible.width() / z, visible.height() / z)
-                p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, z < 2.0)
-                p.drawImage(visible, self.compositor.image, src)
-                if self._stroke is not None and self._live_img is not None:
-                    p.setOpacity(self._stroke.opacity)
-                    p.setCompositionMode(comp_mod.blend_mode(
-                        model.layer_blend(self._stroke.layer)))
-                    p.drawImage(visible, self._live_img, src)
-                    p.setOpacity(1.0)
-                    p.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
+                    p.fillRect(self._region, self._checker)
+                p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, self.zoom < 2.0)
+                self.draw_image(p, self.compositor.image, QtCore.QPoint(0, 0))
+                self.handler.paint_sheet(p)
+            self._region = None
             p.setPen(QtGui.QPen(QtGui.QColor(30, 30, 30), 1))
             p.setBrush(QtCore.Qt.NoBrush)
             p.drawRect(target.adjusted(-0.5, -0.5, 0.5, 0.5))
+            p.setRenderHint(QtGui.QPainter.Antialiasing, True)
+            self.handler.paint_overlay(p)
             self._paint_hover(p)
         finally:
             p.end()
@@ -243,10 +390,11 @@ class SheetCanvas(QtWidgets.QWidget):
         return QtCore.QRectF(pos.x() - r, pos.y() - r, 2 * r, 2 * r).toAlignedRect()
 
     def _paint_hover(self, p):
-        if self._hover is None or self._pan is not None or self._space:
+        if self._hover is None or self._pan is not None or self._space \
+                or not self.handler.show_size:
             return
-        p.setRenderHint(QtGui.QPainter.Antialiasing, True)
         r = self._hover_radius()
+        p.setBrush(QtCore.Qt.NoBrush)
         p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 200), 1.0))
         p.drawEllipse(self._hover, r + 0.5, r + 0.5)
         p.setPen(QtGui.QPen(QtGui.QColor(0, 0, 0, 160), 1.0))
@@ -267,93 +415,36 @@ class SheetCanvas(QtWidgets.QWidget):
             self.fit()
 
     # ------------------------------------------------------------------
-    #  Strokes
-    # ------------------------------------------------------------------
-    def _begin(self, pos, pressure, kind):
-        st = self.current()
-        self._stroke = model.Stroke(self.tool, st["color"], st["size"], st["opacity"],
-                                    model.TOOLS[self.tool]["layer"], [])
-        c = self.compositor
-        if self._live_img is None or self._live_img.width() != c.w \
-                or self._live_img.height() != c.h:
-            self._live_img = comp_mod.new_image(c.w, c.h)
-        self._raster = brushes.StrokeRaster(self._live_img, (0, 0), self._stroke, self.scale)
-        self._stab = geom.Stabilizer(prefs.get("Smoothing"))
-        self._speed = geom.SpeedPressure() \
-            if kind == "mouse" and prefs.get("MouseSpeedPressure") else None
-        self._input = kind
-        self._raw_last = None
-        self._add_point(pos, pressure)
-
-    def _add_point(self, pos, pressure):
-        s = self.to_sheet_px(pos)
-        x, y = s.x() / self.scale, s.y() / self.scale
-        self._raw_last = (x, y, pressure)
-        x, y = self._stab.feed(x, y)
-        if self._speed is not None:
-            pressure = self._speed.feed(x, y, time.monotonic())
-        pts = self._stroke.points
-        if pts and math.hypot(x - pts[-1][0], y - pts[-1][1]) < 0.4 / self.scale:
-            return
-        pts.append((x, y, pressure))
-        # spans with one point of look-ahead are final
-        r = self._raster.draw_to(len(pts) - 2)
-        if r is not None:
-            self.update(self.to_widget_rect(r))
-
-    def _end(self):
-        stroke = self._stroke
-        pts = stroke.points
-        if self._raw_last is not None and pts:
-            x, y, p = self._raw_last
-            if self._speed is not None:
-                p = pts[-1][2]
-            if math.hypot(x - pts[-1][0], y - pts[-1][1]) >= 0.4 / self.scale:
-                pts.append((x, y, p))
-        if self._speed is not None and len(pts) > 2:
-            # the mouse has no pressure: give the thrown-line ends by hand
-            stroke.points = geom.taper_ends(pts, 3.0 + stroke.size, 5.0 + stroke.size)
-        self._live_img.fill(0)
-        self._stroke = None
-        self._raster = None
-        self._input = None
-        if stroke.points:
-            self.undo_stack.push(undo.AddStroke(self, stroke))
-        else:
-            self.update()
-
-    def cancel_stroke(self):
-        if self._stroke is not None:
-            self._live_img.fill(0)
-            self._stroke = None
-            self._raster = None
-            self._input = None
-            self.update()
-
-    # ------------------------------------------------------------------
     #  Tablet
     # ------------------------------------------------------------------
     def tabletEvent(self, event):
         t = event.type()
         pos = event_pos(event)
+        mods = event.modifiers()
         if t == QtCore.QEvent.TabletPress:
             if self._space or (event.buttons() & QtCore.Qt.MiddleButton):
                 self._pan = pos
-            elif self._stroke is None:
+            elif self._input is None:
                 self._curve = prefs.get("PressureCurve")
-                self._begin(pos, geom.pressure_curve(event.pressure(), self._curve), "tablet")
+                self._input = "tablet"
+                self.handler.press(pos, geom.pressure_curve(event.pressure(), self._curve),
+                                   mods)
         elif t == QtCore.QEvent.TabletMove:
             if self._pan is not None:
                 self._pan_to(pos)
             elif self._input == "tablet":
-                self._add_point(pos, geom.pressure_curve(event.pressure(), self._curve))
+                self.handler.move(pos, geom.pressure_curve(event.pressure(), self._curve),
+                                  mods)
             else:
+                self.handler.move(pos, None, mods)
                 self._update_hover(pos)
         elif t == QtCore.QEvent.TabletRelease:
             if self._pan is not None:
                 self._pan = None
             elif self._input == "tablet":
-                self._end()
+                self._input = None
+                self.handler.release(pos, geom.pressure_curve(event.pressure(), self._curve),
+                                     mods)
         event.accept()
 
     # ------------------------------------------------------------------
@@ -367,18 +458,24 @@ class SheetCanvas(QtWidgets.QWidget):
         if b == QtCore.Qt.MiddleButton or (b == QtCore.Qt.LeftButton and self._space):
             self._pan = pos
             self.setCursor(QtCore.Qt.ClosedHandCursor)
-        elif b == QtCore.Qt.LeftButton and self._stroke is None:
-            self._begin(pos, 1.0, "mouse")
-        elif b == QtCore.Qt.RightButton and self._stroke is not None:
-            self.cancel_stroke()
+        elif b == QtCore.Qt.LeftButton and self._input is None:
+            self._input = "mouse"
+            self.handler.press(pos, None, event.modifiers())
+        elif b == QtCore.Qt.RightButton:
+            right = getattr(self.handler, "right_click", None)
+            if not (right and right(pos)):
+                self.handler.cancel()
+                self._input = None
 
     def mouseMoveEvent(self, event):
         pos = event_pos(event)
         if self._pan is not None:
             self._pan_to(pos)
-        elif self._input == "mouse":
-            self._add_point(pos, 1.0)
-        elif self._input is None:
+            return
+        if self._input == "tablet":
+            return
+        self.handler.move(pos, None, event.modifiers())
+        if self._input is None:
             self._update_hover(pos)
 
     def mouseReleaseEvent(self, event):
@@ -387,7 +484,15 @@ class SheetCanvas(QtWidgets.QWidget):
             self._pan = None
             self.setCursor(QtCore.Qt.OpenHandCursor if self._space else QtCore.Qt.CrossCursor)
         elif self._input == "mouse" and event.button() == QtCore.Qt.LeftButton:
-            self._end()
+            self._input = None
+            self.handler.release(event_pos(event), None, event.modifiers())
+
+    def mouseDoubleClickEvent(self, event):
+        dbl = getattr(self.handler, "double_click", None)
+        if dbl is not None and event.button() == QtCore.Qt.LeftButton:
+            dbl(event_pos(event))
+        else:
+            self.mousePressEvent(event)
 
     def leaveEvent(self, event):
         self._update_hover(None)
@@ -408,8 +513,7 @@ class SheetCanvas(QtWidgets.QWidget):
     #  Keyboard
     # ------------------------------------------------------------------
     def event(self, event):
-        # Take our keys before FreeCAD's global shortcuts (Ctrl+Z is
-        # Std_Undo, which would undo in the 3D document instead)
+        # Take our keys before FreeCAD's global shortcuts
         if event.type() == QtCore.QEvent.ShortcutOverride and _key_code(event) in _OWN_KEYS:
             event.accept()
             return True
@@ -421,18 +525,20 @@ class SheetCanvas(QtWidgets.QWidget):
         ctrl = bool(mods & QtCore.Qt.ControlModifier)
         shift = bool(mods & QtCore.Qt.ShiftModifier)
         if k == int(QtCore.Qt.Key_Z) and ctrl:
+            self.handler.cancel()
             if shift:
                 self.undo_stack.redo()
             else:
                 self.undo_stack.undo()
         elif k == int(QtCore.Qt.Key_Y) and ctrl:
+            self.handler.cancel()
             self.undo_stack.redo()
         elif ctrl:
             QtWidgets.QWidget.keyPressEvent(self, event)
-        elif k == int(QtCore.Qt.Key_P):
-            self.set_tool("pencil")
-        elif k == int(QtCore.Qt.Key_M):
-            self.set_tool("marker")
+        elif self.handler.key(k, mods):
+            pass
+        elif k in _TOOL_KEYS and self._input is None:
+            self.set_tool(_TOOL_KEYS[k])
         elif k == int(QtCore.Qt.Key_BracketLeft):
             self.set_size(self.current()["size"] / 1.2)
         elif k == int(QtCore.Qt.Key_BracketRight):
@@ -509,6 +615,159 @@ class SwatchBar(QtWidgets.QWidget):
 
 
 # ----------------------------------------------------------------------
+#  Tool options (second row) and paper / layers panel
+# ----------------------------------------------------------------------
+def _percent_spin(tooltip):
+    s = QtWidgets.QSpinBox()
+    s.setRange(0, 100)
+    s.setSuffix(" %")
+    s.setToolTip(tooltip)
+    return s
+
+
+class ToolOptions(QtWidgets.QWidget):
+    """Options of the active tool: spline mode, eraser mode and layers,
+    width profile of vector strokes, and a short hint."""
+
+    def __init__(self, canvas, parent=None):
+        QtWidgets.QWidget.__init__(self, parent)
+        self.canvas = canvas
+        lay = QtWidgets.QHBoxLayout(self)
+        lay.setContentsMargins(6, 2, 6, 2)
+
+        self.spline_mode = QtWidgets.QComboBox()
+        self.spline_mode.addItem(tr("Freehand, smoothed"), "freehand")
+        self.spline_mode.addItem(tr("Control points"), "points")
+        self.spline_mode.currentIndexChanged.connect(
+            lambda _i: canvas.set_option("mode", self.spline_mode.currentData()))
+
+        self.eraser_mode = QtWidgets.QComboBox()
+        self.eraser_mode.addItem(tr("Soft (pixels)"), "soft")
+        self.eraser_mode.addItem(tr("Whole strokes"), "strokes")
+        self.eraser_mode.currentIndexChanged.connect(
+            lambda _i: canvas.set_option("mode", self.eraser_mode.currentData()))
+        self.eraser_target = QtWidgets.QComboBox()
+        self.eraser_target.addItem(tr("All layers"), model.ALL_LAYERS)
+        for k, label, _b in model.LAYERS:
+            if k in model.ERASABLE_LAYERS:
+                self.eraser_target.addItem(tr_data(label), k)
+        self.eraser_target.currentIndexChanged.connect(
+            lambda _i: canvas.set_option("target", self.eraser_target.currentData()))
+        self.eraser_label = QtWidgets.QLabel(tr("Erase on:"))
+
+        self.profile = QtWidgets.QWidget()
+        pl = QtWidgets.QHBoxLayout(self.profile)
+        pl.setContentsMargins(0, 0, 0, 0)
+        self.peak = _percent_spin(tr("Position of the widest point along the stroke"))
+        self.peak.setRange(5, 95)
+        self.tin = _percent_spin(tr("0 %: blunt start, 100 %: pointed start"))
+        self.tout = _percent_spin(tr("0 %: blunt end, 100 %: pointed end"))
+        for label, w, name in ((tr("Widest at:"), self.peak, "peak"),
+                               (tr("Start taper:"), self.tin, "tin"),
+                               (tr("End taper:"), self.tout, "tout")):
+            pl.addWidget(QtWidgets.QLabel(label))
+            pl.addWidget(w)
+            w.valueChanged.connect(lambda v, n=name: canvas.set_profile(n, v / 100.0))
+
+        self.hint = QtWidgets.QLabel()
+        self.hint.setStyleSheet("color: gray;")
+        for w in (self.spline_mode, self.eraser_mode, self.eraser_label,
+                  self.eraser_target, self.profile):
+            lay.addWidget(w)
+        lay.addWidget(self.hint, 1)
+        self.sync()
+
+    def sync(self):
+        c = self.canvas
+        tool = c.tool
+        st = c.current()
+        vector = model.TOOLS.get(tool, {}).get("kind") == "vector" or \
+            (tool == "edit" and c.selection() is not None)
+        self.spline_mode.setVisible(tool == "spline")
+        for w in (self.eraser_mode, self.eraser_label, self.eraser_target):
+            w.setVisible(tool == "eraser")
+        self.profile.setVisible(vector)
+        for combo, value in ((self.spline_mode, c.tool_settings["spline"]["mode"]),
+                             (self.eraser_mode, c.tool_settings["eraser"]["mode"]),
+                             (self.eraser_target, c.tool_settings["eraser"]["target"])):
+            combo.blockSignals(True)
+            combo.setCurrentIndex(max(0, combo.findData(value)))
+            combo.blockSignals(False)
+        if vector:
+            for w, name in ((self.peak, "peak"), (self.tin, "tin"), (self.tout, "tout")):
+                w.blockSignals(True)
+                w.setValue(int(round(st[name] * 100)))
+                w.blockSignals(False)
+        self.hint.setText(self._hint(tool))
+
+    def _hint(self, tool):
+        if tool == "line":
+            return tr("Drag from one end to the other. Shift: angle in 15° steps.")
+        if tool == "spline":
+            if self.canvas.tool_settings["spline"]["mode"] == "points":
+                return tr("Click the points of the curve; click the last one again, "
+                          "double-click or Enter to finish. Backspace: remove the last "
+                          "point, Esc: cancel.")
+            return tr("Draw freely: the stroke is smoothed into an editable curve.")
+        if tool == "eraser":
+            return tr("Shift: straight line.")
+        if tool == "edit":
+            return tr("Click a line or spline stroke, then drag its points or the stroke "
+                      "itself. Delete removes it.")
+        return tr("Shift: straight line.")
+
+
+class LayersPanel(QtWidgets.QWidget):
+    """Paper of the sheet and visibility / opacity of each layer."""
+
+    def __init__(self, canvas, parent=None):
+        QtWidgets.QWidget.__init__(self, parent)
+        self.canvas = canvas
+        sheet = canvas.sheet
+        lay = QtWidgets.QVBoxLayout(self)
+        lay.setContentsMargins(6, 6, 6, 6)
+
+        g = QtWidgets.QGroupBox(tr("Paper"))
+        gl = QtWidgets.QVBoxLayout(g)
+        self.paper = QtWidgets.QComboBox()
+        for key, label, _color in model.PAPERS:
+            self.paper.addItem(tr_data(label), key)
+        self.paper.setCurrentIndex(max(0, self.paper.findData(sheet.paper)))
+        self.paper.currentIndexChanged.connect(
+            lambda _i: canvas.set_paper(self.paper.currentData()))
+        gl.addWidget(self.paper)
+        lay.addWidget(g)
+
+        g = QtWidgets.QGroupBox(tr("Layers"))
+        grid = QtWidgets.QGridLayout(g)
+        users = {}
+        for key in model.TOOL_KEYS:
+            t = model.TOOLS[key]
+            if t["kind"] != "eraser":
+                users.setdefault(t["layer"], []).append(tr_data(t["label"]))
+        row = 0
+        for key, label, _blend in reversed(model.LAYERS):    # top layer first
+            if key not in model.ERASABLE_LAYERS:
+                continue
+            info = sheet.layers[key]
+            check = QtWidgets.QCheckBox(tr_data(label))
+            check.setChecked(info["visible"])
+            check.setToolTip(", ".join(users.get(key, [])))
+            check.toggled.connect(lambda on, k=key: canvas.set_layer(k, visible=on))
+            slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+            slider.setRange(0, 100)
+            slider.setValue(int(round(info["opacity"] * 100)))
+            slider.setToolTip(tr("Layer opacity"))
+            slider.valueChanged.connect(
+                lambda v, k=key: canvas.set_layer(k, opacity=v / 100.0))
+            grid.addWidget(check, row, 0)
+            grid.addWidget(slider, row, 1)
+            row += 1
+        lay.addWidget(g)
+        lay.addStretch(1)
+
+
+# ----------------------------------------------------------------------
 #  Board (MDI tab content)
 # ----------------------------------------------------------------------
 def export_png_dialog(parent, sheet, default_path):
@@ -528,14 +787,16 @@ def export_png_dialog(parent, sheet, default_path):
 
 
 class SheetBoard(QtWidgets.QWidget):
-    """Toolbar + canvas + status line. `on_apply(board)` writes the sheet
-    into the document (button "Update 3D" and closing); `export_path` is
-    the default file name of the PNG export."""
+    """Toolbar + tool options + canvas + paper / layers panel + status
+    line. `on_apply(board)` writes the sheet into the document (button
+    "Update 3D" and closing); `export_path` is the default file name of the
+    PNG export."""
 
     def __init__(self, sheet, title, on_apply=None, export_path="", parent=None):
         QtWidgets.QWidget.__init__(self, parent)
         self.on_apply = on_apply
         self.export_path = export_path
+        self._edited = False        # paper / layer changes (not in the undo stack)
         self.setWindowTitle(title)
         self.setWindowIcon(QtGui.QIcon(icon("Croquis.svg")))
 
@@ -543,34 +804,51 @@ class SheetBoard(QtWidgets.QWidget):
         self.toolbar = QtWidgets.QToolBar(self)
         self.toolbar.setIconSize(QtCore.QSize(22, 22))
         self._build_toolbar()
+        self.options = ToolOptions(self.canvas, self)
+        self.layers = LayersPanel(self.canvas, self)
         self.status = QtWidgets.QLabel()
         self.status.setContentsMargins(6, 2, 6, 2)
+
+        split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
+        split.addWidget(self.canvas)
+        split.addWidget(self.layers)
+        split.setStretchFactor(0, 1)
+        split.setStretchFactor(1, 0)
+        split.setCollapsible(0, False)
+        split.setSizes([1000, 210])
 
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         lay.addWidget(self.toolbar)
-        lay.addWidget(self.canvas, 1)
+        lay.addWidget(self.options)
+        lay.addWidget(split, 1)
         lay.addWidget(self.status)
 
-        self.canvas.toolChanged.connect(self._sync_tool)
-        self.canvas.settingsChanged.connect(self._sync_settings)
-        self.canvas.zoomChanged.connect(lambda _z: self._sync_status())
-        self.canvas.undo_stack.indexChanged.connect(lambda _i: self._sync_status())
-        self._sync_tool(self.canvas.tool)
+        c = self.canvas
+        c.toolChanged.connect(self._sync_tool)
+        c.settingsChanged.connect(self._sync_settings)
+        c.zoomChanged.connect(lambda _z: self._sync_status())
+        c.undo_stack.indexChanged.connect(lambda _i: self._sync_status())
+        c.sheetEdited.connect(self._on_edited)
+        self._sync_tool(c.tool)
         self._sync_settings()
         self._sync_status()
-        self.canvas.setFocus()
+        c.setFocus()
 
     @property
     def sheet(self):
         return self.canvas.sheet
 
     def is_modified(self):
-        return not self.canvas.undo_stack.isClean()
+        return self._edited or not self.canvas.undo_stack.isClean()
 
     def mark_saved(self):
+        self._edited = False
         self.canvas.undo_stack.setClean()
+
+    def _on_edited(self):
+        self._edited = True
 
     # --- toolbar
     def _build_toolbar(self):
@@ -579,11 +857,10 @@ class SheetBoard(QtWidgets.QWidget):
         self.tool_actions = {}
         group = QActionGroup(self)
         group.setExclusive(True)
-        for key, icon_file, shortcut in (("pencil", "Pencil.svg", "P"),
-                                         ("marker", "Marker.svg", "M")):
-            a = QAction(QtGui.QIcon(icon(icon_file)),
-                        tr_data(model.TOOLS[key]["label"]), self)
-            a.setToolTip("%s (%s)" % (tr_data(model.TOOLS[key]["label"]), shortcut))
+        for key, icon_file, shortcut in BOARD_TOOLS:
+            text = tool_label(key)
+            a = QAction(QtGui.QIcon(icon(icon_file)), text, self)
+            a.setToolTip("%s (%s)" % (text, QtGui.QKeySequence(int(shortcut)).toString()))
             a.setCheckable(True)
             a.triggered.connect(lambda _c=False, k=key: c.set_tool(k))
             group.addAction(a)
@@ -594,10 +871,10 @@ class SheetBoard(QtWidgets.QWidget):
         self.color_btn = QtWidgets.QToolButton()
         self.color_btn.setToolTip(tr("Other colour…"))
         self.color_btn.clicked.connect(self._pick_color)
-        tb.addWidget(self.color_btn)
+        self.color_action = tb.addWidget(self.color_btn)
         self.swatches = SwatchBar()
         self.swatches.colorPicked.connect(c.set_color)
-        tb.addWidget(self.swatches)
+        self.swatch_action = tb.addWidget(self.swatches)
         tb.addSeparator()
 
         tb.addWidget(QtWidgets.QLabel(" " + tr("Size:") + " "))
@@ -645,15 +922,24 @@ class SheetBoard(QtWidgets.QWidget):
         a = self.tool_actions.get(key)
         if a is not None:
             a.setChecked(True)
+        self._sync_settings()
 
     def _sync_settings(self):
-        st = self.canvas.current()
+        c = self.canvas
+        st = c.current()
+        erasing = c.tool == "eraser"
+        editing_nothing = c.tool == "edit" and c.selection() is None
+        self.color_action.setVisible(not erasing)
+        self.swatch_action.setVisible(not erasing)
+        for w in (self.color_btn, self.swatches, self.size_spin, self.opacity_spin):
+            w.setEnabled(not editing_nothing)
         self.color_btn.setIcon(color_icon(st["color"], 18))
         for w, v in ((self.size_spin, st["size"]),
                      (self.opacity_spin, int(round(st["opacity"] * 100)))):
             w.blockSignals(True)
             w.setValue(v)
             w.blockSignals(False)
+        self.options.sync()
 
     def _sync_status(self):
         s = self.sheet

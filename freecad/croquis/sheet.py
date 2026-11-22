@@ -110,7 +110,7 @@ class SheetFeature(object):
         # Paper / resolution edited in the property view: re-render
         if prop not in ("Paper", "Resolution"):
             return
-        if "Restore" in obj.State or not hasattr(obj, "ImagePlane"):
+        if _storing or "Restore" in obj.State or not hasattr(obj, "ImagePlane"):
             return
         if prop == "Resolution" and obj.Resolution < 10:
             obj.Resolution = 10
@@ -240,12 +240,22 @@ def update_image(obj, data):
             pass
 
 
+_storing = False
+
+
 def store(obj, data):
-    """Write the strokes of `data` into the sheet object and refresh its
-    image, as one FreeCAD undo step."""
+    """Write the strokes, paper and layers of `data` into the sheet object
+    and refresh its image, as one FreeCAD undo step."""
+    global _storing
     doc = obj.Document
     doc.openTransaction(tr("Edit sketch sheet"))
     try:
+        _storing = True     # no re-render from onChanged: done once below
+        try:
+            if obj.Paper != data.paper:
+                obj.Paper = data.paper
+        finally:
+            _storing = False
         obj.SheetData = data.to_json()
         obj.SheetWidth = data.width
         obj.SheetHeight = data.height
