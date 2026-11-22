@@ -14,4 +14,23 @@ except ImportError:
 
 QT6 = QtCore.qVersion().startswith("6")
 
-__all__ = ["QtCore", "QtGui", "QtWidgets", "QT6"]
+# Moved from QtWidgets to QtGui in Qt6
+QUndoStack = getattr(QtGui, "QUndoStack", None) or QtWidgets.QUndoStack
+QUndoCommand = getattr(QtGui, "QUndoCommand", None) or QtWidgets.QUndoCommand
+QAction = getattr(QtGui, "QAction", None) or QtWidgets.QAction
+QActionGroup = getattr(QtGui, "QActionGroup", None) or QtWidgets.QActionGroup
+QShortcut = getattr(QtGui, "QShortcut", None) or QtWidgets.QShortcut
+
+
+def event_pos(event):
+    """Position (QPointF, widget coordinates) of a mouse / tablet / wheel
+    event in both Qt5 and Qt6."""
+    if hasattr(event, "position"):
+        return event.position()
+    if hasattr(event, "posF"):
+        return event.posF()
+    return event.localPos()
+
+
+__all__ = ["QtCore", "QtGui", "QtWidgets", "QT6", "QUndoStack", "QUndoCommand",
+           "QAction", "QActionGroup", "QShortcut", "event_pos"]
