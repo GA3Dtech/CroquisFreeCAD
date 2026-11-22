@@ -1,0 +1,326 @@
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Croquis - sheet document object
+# Copyright (C) 2026 GA3Dtech
+#
+# This library is free software; you can redistribute it and/or modify it
+# under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation; either version 2.1 of the License, or (at
+# your option) any later version.
+#
+# This library is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public
+# License for more details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this library; if not, see <https://www.gnu.org/licenses/>.
+"""
+sheet.py (Croquis) - the "Croquis::Sheet" object of a document.
+
+A sheet is an App::FeaturePython holding the strokes as JSON (property
+SheetData, model.SheetData) and a link to an Image::ImagePlane showing the
+rendered PNG in the 3D scene. The image plane is a plain FreeCAD image
+plane: everything that works with an imported picture works with it.
+
+    create_sheet(doc, ...)     new sheet + image plane, returns the sheet
+    update_image(obj, data)    render the PNG and load it in the image plane
+    open_board(obj)            drawing board in a FreeCAD tab (GUI)
+
+This module must import without the GUI (the proxies are restored when a
+document is opened in FreeCADCmd): Qt and FreeCADGui are imported lazily.
+"""
+
+import os
+import tempfile
+
+import FreeCAD as App
+
+from . import model, icon
+from .i18n import tr
+
+TYPE = "Croquis::Sheet"
+PLANES = ("XY", "XZ", "YZ")
+
+
+def is_sheet(obj):
+    proxy = getattr(obj, "Proxy", None)
+    return getattr(proxy, "Type", None) == TYPE
+
+
+def plane_rotation(plane):
+    """Rotation putting the image (X right, Y up, facing +Z) on a plane of
+    the document, seen the right way up from the matching standard view."""
+    if plane == "XZ":       # front view: image X -> X, image up -> Z
+        return App.Rotation(App.Vector(1, 0, 0), 90)
+    if plane == "YZ":       # right view: image X -> Y, image up -> Z
+        return App.Rotation(App.Vector(1, 1, 1), 120)
+    return App.Rotation()
+
+
+def sheet_data(obj):
+    """model.SheetData of a sheet object (paper and dpi from its properties)."""
+    data = model.SheetData.from_json(obj.SheetData)
+    data.paper = obj.Paper
+    data.dpi = int(obj.Resolution)
+    return data
+
+
+# ----------------------------------------------------------------------
+#  Feature
+# ----------------------------------------------------------------------
+class SheetFeature(object):
+    """Proxy of a sketch sheet."""
+
+    Type = TYPE
+
+    def __init__(self, obj):
+        obj.Proxy = self
+        self.setup(obj)
+
+    def setup(self, obj):
+        grp = "Croquis"
+        if not hasattr(obj, "SheetData"):
+            obj.addProperty("App::PropertyString", "SheetData", grp,
+                            "Strokes, layers and paper of the sheet (JSON)")
+        if not hasattr(obj, "Paper"):
+            obj.addProperty("App::PropertyEnumeration", "Paper", grp,
+                            "Paper under the strokes (transparent: PNG with alpha)")
+            obj.Paper = [k for k, _l, _c in model.PAPERS]
+            obj.Paper = "transparent"
+        if not hasattr(obj, "Resolution"):
+            obj.addProperty("App::PropertyInteger", "Resolution", grp,
+                            "Resolution of the rendered image, in dots per inch")
+            obj.Resolution = 150
+        if not hasattr(obj, "SheetWidth"):
+            obj.addProperty("App::PropertyLength", "SheetWidth", grp, "Width of the sheet")
+        if not hasattr(obj, "SheetHeight"):
+            obj.addProperty("App::PropertyLength", "SheetHeight", grp, "Height of the sheet")
+        if not hasattr(obj, "ImagePlane"):
+            obj.addProperty("App::PropertyLink", "ImagePlane", grp,
+                            "Image plane showing the sheet in the 3D view")
+        obj.setEditorMode("SheetData", 2)       # hidden: large JSON
+        obj.setEditorMode("SheetWidth", 1)      # read-only
+        obj.setEditorMode("SheetHeight", 1)
+
+    def onDocumentRestored(self, obj):
+        self.setup(obj)
+
+    def onChanged(self, obj, prop):
+        # Paper / resolution edited in the property view: re-render
+        if prop not in ("Paper", "Resolution"):
+            return
+        if "Restore" in obj.State or not hasattr(obj, "ImagePlane"):
+            return
+        if prop == "Resolution" and obj.Resolution < 10:
+            obj.Resolution = 10
+            return
+        if App.GuiUp and obj.ImagePlane is not None and obj.SheetData:
+            try:
+                update_image(obj, sheet_data(obj))
+            except Exception as exc:
+                App.Console.PrintError("Croquis: image not updated (%s)\n" % exc)
+
+    def execute(self, obj):
+        pass
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+class ViewProviderSheet(object):
+    """Tree entry of a sheet: image plane as child, double-click to draw."""
+
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+        try:
+            from pivy import coin
+            vobj.addDisplayMode(coin.SoGroup(), "Default")
+        except Exception:
+            pass
+
+    def getDisplayModes(self, vobj):
+        return ["Default"]
+
+    def getDefaultDisplayMode(self):
+        return "Default"
+
+    def getIcon(self):
+        return icon("Croquis.svg")
+
+    def claimChildren(self):
+        obj = getattr(self, "Object", None)
+        plane = getattr(obj, "ImagePlane", None) if obj is not None else None
+        return [plane] if plane is not None else []
+
+    def doubleClicked(self, vobj):
+        open_board(vobj.Object)
+        return True
+
+    def setupContextMenu(self, vobj, menu):
+        from .qt import QtGui
+        action = menu.addAction(QtGui.QIcon(icon("EditSheet.svg")), tr("Edit sketch sheet"))
+        action.triggered.connect(lambda: open_board(vobj.Object))
+
+    def onDelete(self, vobj, subelements):
+        close_board(vobj.Object, save=False)
+        return True
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+# ----------------------------------------------------------------------
+#  Creation and image
+# ----------------------------------------------------------------------
+def create_sheet(doc, fmt="A4L", dpi=150, paper="transparent", plane="XZ",
+                 label=None):
+    """New sheet and its image plane (inside the caller's transaction)."""
+    import Image  # noqa: F401  (registers Image::ImagePlane)
+    w, h = model.format_size(fmt)
+    data = model.SheetData(w, h, dpi, paper)
+
+    obj = doc.addObject("App::FeaturePython", "Croquis")
+    SheetFeature(obj)
+    if App.GuiUp:
+        ViewProviderSheet(obj.ViewObject)
+    if label:
+        obj.Label = label
+    obj.SheetWidth = w
+    obj.SheetHeight = h
+    obj.Resolution = int(dpi)
+    obj.Paper = paper
+    obj.SheetData = data.to_json()
+
+    img = doc.addObject("Image::ImagePlane", obj.Name + "_Image")
+    img.Label = obj.Label + " " + tr("(image)")
+    img.Placement = App.Placement(App.Vector(0, 0, 0), plane_rotation(plane))
+    obj.ImagePlane = img
+    update_image(obj, data)
+    return obj
+
+
+def update_image(obj, data):
+    """Render the sheet and load the PNG into its image plane (the file is
+    copied into the document, so it is saved inside the .FCStd)."""
+    img = obj.ImagePlane
+    if img is None:
+        return
+    from .render import compositor
+    folder = tempfile.mkdtemp(prefix="croquis_")
+    # FreeCAD keeps the first file name in the document and only replaces
+    # its content (with a backup for undo), so the name can stay the same
+    path = os.path.join(folder, "%s.png" % obj.Name)
+    try:
+        if not compositor.save_png(data, path):
+            raise IOError(tr("Could not write {path}.").format(path=path))
+        img.ImageFile = path
+        img.XSize = data.width
+        img.YSize = data.height
+    finally:
+        try:
+            os.remove(path)
+            os.rmdir(folder)
+        except OSError:
+            pass
+
+
+def store(obj, data):
+    """Write the strokes of `data` into the sheet object and refresh its
+    image, as one FreeCAD undo step."""
+    doc = obj.Document
+    doc.openTransaction(tr("Edit sketch sheet"))
+    try:
+        obj.SheetData = data.to_json()
+        obj.SheetWidth = data.width
+        obj.SheetHeight = data.height
+        update_image(obj, data)
+    finally:
+        doc.commitTransaction()
+
+
+# ----------------------------------------------------------------------
+#  Drawing board (GUI)
+# ----------------------------------------------------------------------
+_boards = {}    # (document name, object name) -> QMdiSubWindow
+
+
+def _key(obj):
+    return (obj.Document.Name, obj.Name)
+
+
+def open_board(obj):
+    """Open (or bring forward) the drawing board of a sheet in a tab of
+    FreeCAD's main window."""
+    import FreeCADGui as Gui
+    from .qt import QtCore, QtGui, QtWidgets
+    from .canvas.view import SheetBoard
+
+    key = _key(obj)
+    sub = _boards.get(key)
+    if sub is not None:
+        try:
+            sub.mdiArea().setActiveSubWindow(sub)
+            sub.widget().canvas.setFocus()
+            return sub.widget()
+        except RuntimeError:        # deleted on the C++ side
+            _boards.pop(key, None)
+
+    mdi = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    if mdi is None:
+        raise RuntimeError("main window has no MDI area")
+
+    doc_name, obj_name = key
+
+    def apply(board):
+        doc = App.getDocument(doc_name) if doc_name in App.listDocuments() else None
+        target = doc.getObject(obj_name) if doc is not None else None
+        if target is None:
+            App.Console.PrintWarning(
+                tr("Croquis: the sheet no longer exists, strokes not saved.") + "\n")
+            return
+        store(target, board.sheet)
+
+    export_dir = os.path.dirname(obj.Document.FileName) if obj.Document.FileName \
+        else os.path.expanduser("~")
+    board = SheetBoard(sheet_data(obj), "%s - Croquis" % obj.Label, on_apply=apply,
+                       export_path=os.path.join(export_dir, obj.Label + ".png"))
+    sub = mdi.addSubWindow(board)
+    sub.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+    sub.setWindowIcon(QtGui.QIcon(icon("Croquis.svg")))
+    sub.destroyed.connect(lambda *_a: _boards.pop(key, None))
+    _boards[key] = sub
+    sub.showMaximized()
+    mdi.setActiveSubWindow(sub)
+    board.canvas.setFocus()
+    return board
+
+
+def close_board(obj, save=True):
+    """Close the board of a sheet if it is open (without saving when the
+    sheet is being deleted)."""
+    sub = _boards.pop(_key(obj), None)
+    if sub is None:
+        return
+    try:
+        if not save:
+            sub.widget().on_apply = None
+            sub.widget().mark_saved()
+        sub.close()
+    except RuntimeError:
+        pass
