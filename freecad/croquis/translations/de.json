@@ -57,6 +57,7 @@
   "Drag from one end to the other. Shift: angle in 15° steps.": "Von einem Ende zum anderen ziehen. Umschalt: Winkel in 15°-Schritten.",
   "Draw freely: the stroke is smoothed into an editable curve.": "Frei zeichnen: der Strich wird zu einer bearbeitbaren Kurve geglättet.",
   "Click a line or spline stroke, then drag its points or the stroke itself. Delete removes it.": "Eine gerade Linie oder einen Spline-Strich anklicken, dann seine Punkte oder den ganzen Strich ziehen. Entf löscht ihn.",
+  "Drag over something of known size, then type its real length: the sheet takes the right size in 3D. Shift: angle in 15° steps.": "Über etwas bekannter Größe ziehen, dann die wahre Länge eingeben: das Blatt erhält die richtige Größe in 3D. Umschalt: Winkel in 15°-Schritten.",
   "Spline input:": "Spline-Eingabe:",
   "Arrow shape:": "Pfeilform:",
   "Head at the end": "Spitze am Ende",
@@ -151,6 +152,9 @@
   "Edit image": "Bild bearbeiten",
   "Add image": "Bild hinzufügen",
   "Edit vector strokes": "Vektorstriche bearbeiten",
+  "Scale: give a real length": "Maßstab: eine wahre Länge angeben",
+  "Scale": "Maßstab",
+  "Real length of this segment (mm):": "Wahre Länge dieser Strecke (mm):",
   "Paper": "Papier",
   "Layers": "Ebenen",
   "Images ({patterns})": "Bilder ({patterns})",
@@ -176,5 +180,6 @@
   "Update 3D": "3D aktualisieren",
   "Write the strokes into the document and refresh the image plane (also done when the board closes)": "Schreibt die Striche ins Dokument und aktualisiert die Bildebene (geschieht auch beim Schließen des Bretts)",
   "{w:g} × {h:g} mm, {dpi} dpi ({pw} × {ph} px)   |   zoom {zoom} %   |   {n} stroke(s)": "{w:g} × {h:g} mm, {dpi} dpi ({pw} × {ph} px)   |   Zoom {zoom} %   |   {n} Strich(e)",
-  "Size:": "Größe:"
+  "Size:": "Größe:",
+  "3D scale {ratio}": "3D-Maßstab {ratio}"
 }

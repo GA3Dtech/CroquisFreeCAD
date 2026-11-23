@@ -72,7 +72,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.4.0"
+API_VERSION = "1.5.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -173,6 +173,7 @@ def _sheet_info(obj):
         "image_plane": obj.ImagePlane.Name if obj.ImagePlane is not None else None,
         "strokes": len(data.strokes),
         "images": len(data.images()),
+        "scale": float(getattr(obj, "Scale", 1.0)),
         "underlay": data.underlay,
         "strokes_per_layer": counts,
         "layers": [{"key": k, "label": label, "blend": blend,
@@ -788,6 +789,29 @@ def refresh_underlay(sheet, doc=None):
                             data.layers["underlay"]["opacity"], s.get("hide_sheets", True))
 
 
+def set_scale(sheet, scale=None, segment=None, length_mm=None, doc=None):
+    """Size of the sheet in 3D: either `scale` (3D mm per sheet mm), or a
+    `segment` [[x1, y1], [x2, y2]] on the sheet (mm) whose real length is
+    `length_mm`. Returns metadata (with "scale")."""
+    if scale is None:
+        if segment is None or length_mm is None:
+            raise InvalidArgumentError("give scale, or segment and length_mm")
+        try:
+            (x1, y1), (x2, y2) = segment
+        except (TypeError, ValueError):
+            raise InvalidArgumentError("segment must be [[x1, y1], [x2, y2]]")
+        seg = ((_num(x2, "x2") - _num(x1, "x1")) ** 2 + (_num(y2, "y2") - _num(y1, "y1")) ** 2) \
+            ** 0.5
+        if seg <= 0:
+            raise InvalidArgumentError("the segment has no length")
+        scale = _num(length_mm, "length_mm", 1e-6, 1e9) / seg
+    scale = _num(scale, "scale", 1e-6, 1e6)
+
+    def change(data):
+        data.plane_scale = scale
+    return _edit(sheet, doc, tr("Edit sketch sheet"), change)
+
+
 def clear_underlay(sheet, doc=None):
     """Remove the 3D view guide of a sheet."""
     def change(data):
@@ -846,7 +870,8 @@ PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper",
           "list_strokes", "add_strokes", "add_arrow", "delete_strokes", "add_image",
           "new_sheet_from_image", "list_images", "update_image_element",
           "delete_image_element", "capture_3d_view", "restore_image_view", "capture_underlay",
-          "refresh_underlay", "clear_underlay", "render_png", "export_png", "describe"]
+          "refresh_underlay", "clear_underlay", "set_scale", "render_png", "export_png",
+          "describe"]
 
 GUI_ONLY = ["capture_3d_view", "restore_image_view", "capture_underlay", "refresh_underlay"]
 

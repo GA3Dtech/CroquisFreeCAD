@@ -839,10 +839,71 @@ class EditTool(Tool):
                 painter.drawEllipse(p, 3.0, 3.0)
 
 
+# ----------------------------------------------------------------------
+#  Scale (calibration)
+# ----------------------------------------------------------------------
+class ScaleTool(Tool):
+    """Give the real size of something drawn or pasted: drag a segment over
+    a known length, type that length; the sheet's scale (the size of its
+    image plane in 3D) follows. Shift snaps the angle."""
+
+    show_size = False
+
+    def __init__(self, canvas, key):
+        Tool.__init__(self, canvas, key)
+        self.a = self.b = None
+
+    @property
+    def busy(self):
+        return self.a is not None
+
+    def press(self, pos, pressure, mods):
+        self.a = self.b = self.c.to_mm(pos)
+
+    def move(self, pos, pressure, mods):
+        if self.a is None:
+            return
+        x, y = self.c.to_mm(pos)
+        if _shift(mods):
+            x, y = geom.snap_angle(self.a[0], self.a[1], x, y)
+        self.b = (x, y)
+        self.c.update()
+
+    def release(self, pos, pressure, mods):
+        if self.a is None:
+            return
+        self.move(pos, pressure, mods)
+        a, b = self.a, self.b
+        self.a = self.b = None
+        self.c.update()
+        length = math.hypot(b[0] - a[0], b[1] - a[1])
+        if length > 0.5:
+            self.c.ask_scale(length)
+
+    def cancel(self):
+        self.a = self.b = None
+        self.c.update()
+
+    def paint_overlay(self, painter):
+        if self.a is None or self.b is None:
+            return
+        pa, pb = self.c.to_widget(self.a), self.c.to_widget(self.b)
+        painter.setPen(QtGui.QPen(QtGui.QColor(214, 69, 61), 2))
+        painter.drawLine(pa, pb)
+        for p in (pa, pb):
+            painter.drawLine(QtCore.QPointF(p.x() - 5, p.y()), QtCore.QPointF(p.x() + 5, p.y()))
+            painter.drawLine(QtCore.QPointF(p.x(), p.y() - 5), QtCore.QPointF(p.x(), p.y() + 5))
+        mm = math.hypot(self.b[0] - self.a[0], self.b[1] - self.a[1]) * self.c.sheet.plane_scale
+        mid = QtCore.QPointF((pa.x() + pb.x()) / 2 + 8, (pa.y() + pb.y()) / 2 - 8)
+        painter.drawText(mid, "%.1f mm" % mm)
+
+
 def make_tool(canvas, key):
     """Tool object for a tool key (and its current mode)."""
     if key == "edit":
         return EditTool(canvas, key)
+    if key == "scale":
+        return ScaleTool(canvas, key)
     kind = model.tool_kind(key)
     if kind == "vector":
         straight = key == "line" or (key == "arrow" and

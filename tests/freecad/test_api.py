@@ -223,3 +223,16 @@ def test_add_arrow(doc, sheet):
     with pytest.raises(errors.InvalidStrokeError):
         api.add_strokes(n, [{"tool": "arrow", "points": [[0, 0], [1, 1]],
                              "heads": {"end": "yes"}}], doc=doc)
+
+
+def test_set_scale(doc, sheet):
+    n = sheet["name"]
+    assert api.set_scale(n, 2.5, doc=doc)["scale"] == 2.5
+    plane = doc.getObject(sheet["image_plane"])
+    assert plane.XSize.Value == pytest.approx(210 * 2.5)
+    info = api.set_scale(n, segment=[[10, 10], [60, 10]], length_mm=200, doc=doc)
+    assert info["scale"] == pytest.approx(4.0) and plane.YSize.Value == pytest.approx(148 * 4)
+    for kw in ({}, {"scale": -1}, {"segment": [[0, 0], [0, 0]], "length_mm": 5},
+               {"segment": "x", "length_mm": 5}):
+        with pytest.raises(errors.InvalidArgumentError):
+            api.set_scale(n, doc=doc, **kw)

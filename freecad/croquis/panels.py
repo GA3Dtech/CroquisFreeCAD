@@ -141,6 +141,9 @@ def tool_options_model(canvas):
         if tool == "edit":
             return tr("Click a line or spline stroke, then drag its points or the stroke "
                       "itself. Delete removes it.")
+        if tool == "scale":
+            return tr("Drag over something of known size, then type its real length: the "
+                      "sheet takes the right size in 3D. Shift: angle in 15° steps.")
         return tr("Shift: straight line.")
 
     targets = [(model.ALL_LAYERS, tr("All layers"))] + [

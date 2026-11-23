@@ -195,3 +195,40 @@ def test_copy_paste_on_board_keep_document_objects(board, doc):
     assert b.canvas.tool == "pencil"        # Ctrl+V does not pick the edit tool
     img = QtWidgets.QApplication.clipboard().image()
     assert not img.isNull() and img.width() == b.canvas.compositor.w
+
+
+def test_scale_tool(board, monkeypatch):
+    QtCore, _g, QtWidgets, _t = qt()
+    obj, b = board
+    c = b.canvas
+    key(c, QtCore.Qt.Key_K)
+    assert c.tool == "scale"
+    asked = []
+
+    def fake(parent, title, label, value, lo, hi, dec):
+        asked.append(value)
+        return 100.0, True
+    monkeypatch.setattr(QtWidgets.QInputDialog, "getDouble", fake)
+    a, z = c.to_widget((20, 50)), c.to_widget((70, 50))     # 50 mm on the sheet
+    drag(c, [(a.x(), a.y()), (z.x(), z.y())])
+    assert len(asked) == 1 and asked[0] == pytest.approx(50, abs=0.5), asked
+    assert c.sheet.plane_scale == pytest.approx(2.0, rel=0.02)
+    assert "1:2" in b.status.text()
+    sheet.close_board(obj)
+    assert obj.Scale == pytest.approx(2.0, rel=0.02)
+    assert obj.ImagePlane.XSize.Value == pytest.approx(210 * obj.Scale)
+
+
+def test_manual_plane_scale_survives_board_update(board):
+    from freecad.croquis.canvas import undo
+    obj, b = board
+    sheet.close_board(obj)
+    obj.ImagePlane.XSize = obj.ImagePlane.XSize.Value * 3     # scaled by hand in 3D
+    obj.ImagePlane.YSize = obj.ImagePlane.YSize.Value * 3
+    b = sheet.open_board(obj)
+    c = b.canvas
+    c.undo_stack.push(undo.AddStroke(c, model.Stroke("marker", "#555555", 6, 0.5, "marker",
+                                                     [(20, 20, 1), (180, 120, 1)])))
+    sheet.close_board(obj)                                    # update
+    assert obj.Scale == pytest.approx(3.0)
+    assert obj.ImagePlane.XSize.Value == pytest.approx(210 * 3)

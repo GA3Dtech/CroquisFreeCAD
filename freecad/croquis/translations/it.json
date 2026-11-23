@@ -57,6 +57,7 @@
   "Drag from one end to the other. Shift: angle in 15° steps.": "Trascina da un'estremità all'altra. Maiusc: angolo a passi di 15°.",
   "Draw freely: the stroke is smoothed into an editable curve.": "Disegna liberamente: il tratto viene levigato in una curva modificabile.",
   "Click a line or spline stroke, then drag its points or the stroke itself. Delete removes it.": "Clicca una linea retta o un tratto spline, poi trascina i suoi punti o il tratto intero. Canc lo elimina.",
+  "Drag over something of known size, then type its real length: the sheet takes the right size in 3D. Shift: angle in 15° steps.": "Trascina su qualcosa di dimensione nota, poi digita la sua lunghezza reale: il foglio prende la giusta dimensione in 3D. Maiusc: angolo a passi di 15°.",
   "Spline input:": "Inserimento spline:",
   "Arrow shape:": "Forma della freccia:",
   "Head at the end": "Punta alla fine",
@@ -151,6 +152,9 @@
   "Edit image": "Modifica immagine",
   "Add image": "Aggiungi immagine",
   "Edit vector strokes": "Modifica tratti vettoriali",
+  "Scale: give a real length": "Scala: indicare una lunghezza reale",
+  "Scale": "Scala",
+  "Real length of this segment (mm):": "Lunghezza reale di questo segmento (mm):",
   "Paper": "Carta",
   "Layers": "Livelli",
   "Images ({patterns})": "Immagini ({patterns})",
@@ -176,5 +180,6 @@
   "Update 3D": "Aggiorna 3D",
   "Write the strokes into the document and refresh the image plane (also done when the board closes)": "Scrive i tratti nel documento e aggiorna il piano immagine (fatto anche alla chiusura della tavola)",
   "{w:g} × {h:g} mm, {dpi} dpi ({pw} × {ph} px)   |   zoom {zoom} %   |   {n} stroke(s)": "{w:g} × {h:g} mm, {dpi} dpi ({pw} × {ph} px)   |   zoom {zoom} %   |   {n} tratto/i",
-  "Size:": "Dimensione:"
+  "Size:": "Dimensione:",
+  "3D scale {ratio}": "scala 3D {ratio}"
 }

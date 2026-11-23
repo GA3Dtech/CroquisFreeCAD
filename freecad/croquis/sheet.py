@@ -308,8 +308,10 @@ def update_image(obj, data):
     try:
         if not compositor.save_png(data, path):
             raise IOError(tr("Could not write {path}.").format(path=path))
-        img.ImageFile = path
+        # detect a manual scaling BEFORE loading the picture: in the GUI the
+        # image plane's view provider resizes the plane on a new image
         adopt_manual_scale(obj)
+        img.ImageFile = path
         size_plane(obj, data.width, data.height)
     finally:
         try:
@@ -366,9 +368,10 @@ def write(obj, data):
     if scale is not None and scale != getattr(data, "plane_scale_read", None) and scale > 0:
         _storing = True
         try:
-            obj.Scale = scale           # set on the board (scale tool)
+            obj.Scale = scale           # set on the board (scale tool) or the API
         finally:
             _storing = False
+        size_plane(obj)
     sync_files(obj, data)
     obj.SheetData = data.to_json()
     obj.SheetWidth = data.width

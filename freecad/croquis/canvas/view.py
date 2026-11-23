@@ -56,6 +56,7 @@ BOARD_TOOLS = [
     ("arrow", "Arrow.svg", QtCore.Qt.Key_A),
     ("eraser", "Eraser.svg", QtCore.Qt.Key_E),
     ("edit", "EditStroke.svg", QtCore.Qt.Key_V),
+    ("scale", "Scale.svg", QtCore.Qt.Key_K),
 ]
 _TOOL_KEYS = dict((int(k), t) for t, _i, k in BOARD_TOOLS)
 
@@ -88,6 +89,8 @@ def _key_code(event):
 def tool_label(key):
     if key == "edit":
         return tr("Edit vector strokes")
+    if key == "scale":
+        return tr("Scale: give a real length")
     return tr_data(model.TOOLS[key]["label"])
 
 
@@ -249,7 +252,7 @@ class SheetCanvas(QtWidgets.QWidget):
             d = {"color": sel.color, "size": sel.size, "opacity": sel.opacity}
             d.update(sel.profile())
             return d
-        if self.tool == "edit":
+        if self.tool not in self.tool_settings:      # edit, scale
             return dict(self.tool_settings["spline"])
         return self.tool_settings[self.tool]
 
@@ -266,7 +269,7 @@ class SheetCanvas(QtWidgets.QWidget):
             else:
                 setattr(new, name, value)
             self.undo_stack.push(undo.ReplaceStroke(self, sel, new, merge_key=name))
-        elif self.tool != "edit":
+        elif self.tool in self.tool_settings:
             self.tool_settings[self.tool][name] = value
         self.settingsChanged.emit()
         self._update_hover(self._hover)
@@ -423,6 +426,22 @@ class SheetCanvas(QtWidgets.QWidget):
             except ValueError:
                 pass
         return added
+
+    def set_plane_scale(self, scale):
+        """Scale of the sheet's image plane (3D mm per sheet mm); saved
+        with the sheet."""
+        if scale > 0:
+            self.sheet.plane_scale = float(scale)
+            self.sheetEdited.emit()
+
+    def ask_scale(self, length_mm):
+        """Scale tool: the real length of a segment of `length_mm` on the
+        sheet. A one-off question: a classic input dialog."""
+        real, ok = QtWidgets.QInputDialog.getDouble(
+            self, tr("Scale"), tr("Real length of this segment (mm):"),
+            length_mm * self.sheet.plane_scale, 0.001, 1e7, 2)
+        if ok and real > 0:
+            self.set_plane_scale(real / length_mm)
 
     def set_guide(self, img, settings):
         """Show a captured 3D view guide (or remove it with None). Saved
@@ -926,6 +945,7 @@ class SheetBoard(QtWidgets.QWidget):
 
     def _on_edited(self):
         self._edited = True
+        self._sync_status()
 
     # --- toolbar
     def _build_toolbar(self):
@@ -1037,11 +1057,15 @@ class SheetBoard(QtWidgets.QWidget):
     def _sync_status(self):
         s = self.sheet
         w, h = s.pixel_size()
-        self.status.setText(
-            tr("{w:g} × {h:g} mm, {dpi} dpi ({pw} × {ph} px)   |   zoom {zoom} %   |   "
-               "{n} stroke(s)").format(w=s.width, h=s.height, dpi=s.dpi, pw=w, ph=h,
-                                       zoom=int(round(self.canvas.zoom * 100)),
-                                       n=len(s.strokes)))
+        text = tr("{w:g} × {h:g} mm, {dpi} dpi ({pw} × {ph} px)   |   zoom {zoom} %   |   "
+                  "{n} stroke(s)").format(w=s.width, h=s.height, dpi=s.dpi, pw=w, ph=h,
+                                          zoom=int(round(self.canvas.zoom * 100)),
+                                          n=len(s.strokes))
+        k = s.plane_scale
+        if abs(k - 1.0) > 1e-9:
+            ratio = ("1:%g" % round(k, 3)) if k >= 1 else ("%g:1" % round(1 / k, 3))
+            text += "   |   " + tr("3D scale {ratio}").format(ratio=ratio)
+        self.status.setText(text)
 
     def guide_3d(self):
         from .. import panels, qml_host

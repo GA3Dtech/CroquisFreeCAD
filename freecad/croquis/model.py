@@ -499,6 +499,9 @@ class SheetData(object):
         self.extra = {}                 # unknown top-level keys, kept as is
         self.elements = []              # images, texts... (format v2)
         self.underlay = None            # guide capture settings (format v2) or None
+        # image plane scale (3D mm per sheet mm): runtime copy of the sheet's
+        # Scale property, not in the JSON
+        self.plane_scale = self.plane_scale_read = 1.0
         self.files = {}                 # element file name -> local path (runtime)
 
     # --- size in pixels at the sheet resolution

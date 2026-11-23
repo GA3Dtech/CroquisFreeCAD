@@ -57,6 +57,10 @@ All notable changes to this project are documented here. The format follows
 - Arrow tool (`A`): straight or curved vector arrows, heads at the start
   and / or end (open, filled, dot, size), editable with the edit tool.
 - API 1.3: `add_arrow`; strokes accept `"heads"` for arrows.
+- Scale tool (`K`) on the board: drag over something of known size, type
+  its real length, and the sheet takes the right size in 3D; the scale is
+  shown in the status line. API 1.5: `set_scale` (value or segment +
+  length); `get_sheet` reports `scale`.
 - A sheet created from a 3D view capture is placed in the camera plane, at
   the focal distance, scaled so it lies exactly on the captured view
   (orthographic and perspective); `capture_3d_view(align="camera")` by
@@ -82,7 +86,8 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 - Updating a sketch no longer resets the size of its image plane: a sheet
   has a `Scale` property (3D mm per sheet mm), and scaling the image plane
-  by hand updates it instead of being undone.
+  by hand updates it instead of being undone (in the GUI, the image plane
+  resized itself when its picture changed).
 - Ctrl+C / Ctrl+V on the drawing board no longer reach FreeCAD's copy /
   paste of document objects.
 
