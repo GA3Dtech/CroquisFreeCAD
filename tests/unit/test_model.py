@@ -5,7 +5,7 @@ import json
 
 import pytest
 import specs
-from conftest import legacy_json_files
+from helpers import legacy_json_files
 
 from freecad.croquis import model
 

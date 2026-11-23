@@ -8,7 +8,7 @@ import subprocess
 import sys
 
 import pytest
-from conftest import ROOT
+from helpers import ROOT
 
 pytestmark = pytest.mark.unit
 

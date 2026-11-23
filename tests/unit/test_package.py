@@ -6,7 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 
 import pytest
-from conftest import ROOT
+from helpers import ROOT
 
 import freecad.croquis as croquis
 

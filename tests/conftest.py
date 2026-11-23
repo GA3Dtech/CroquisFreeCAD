@@ -8,13 +8,11 @@ import sys
 
 import pytest
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESTS = os.path.join(ROOT, "tests")
-LEGACY = os.path.join(TESTS, "fixtures", "legacy")
-
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
-sys.path.insert(0, os.path.join(TESTS, "fixtures"))
+TESTS = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(TESTS)
+for _p in (ROOT, TESTS, os.path.join(TESTS, "fixtures")):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
 
 # Inside FreeCAD the "freecad" namespace already exists: make sure this
 # repository's copy of the addon is the one imported
@@ -42,21 +40,3 @@ def artifacts_dir():
     d = os.environ.get("CROQUIS_ARTIFACTS") or os.path.join(ROOT, "tests", "_artifacts")
     os.makedirs(d, exist_ok=True)
     return d
-
-
-def legacy_json_files():
-    out = []
-    for dirpath, _dirs, files in os.walk(LEGACY):
-        for name in sorted(files):
-            if name.endswith(".json"):
-                out.append(os.path.join(dirpath, name))
-    return sorted(out)
-
-
-def legacy_fcstd_files():
-    out = []
-    for dirpath, _dirs, files in os.walk(LEGACY):
-        for name in sorted(files):
-            if name.endswith(".FCStd"):
-                out.append(os.path.join(dirpath, name))
-    return sorted(out)

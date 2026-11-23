@@ -10,7 +10,8 @@ All notable changes to this project are documented here. The format follows
 - Development tooling: `pyproject.toml` (ruff, pytest markers),
   `.pre-commit-config.yaml`, `.gitattributes`.
 - Frozen v0.2.0 fixture documents (`tests/fixtures/legacy/v0.2.0`).
-- Unit tests (model, geometry, translations, package metadata).
+- Unit tests (model, geometry, translations, package metadata) and
+  offscreen rendering tests with reference images (`--update-golden`).
 - `model.migrate()`: format migrations, applied when a sheet is read.
 
 ### Fixed
