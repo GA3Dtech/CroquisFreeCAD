@@ -68,6 +68,9 @@ def sheet_data(obj):
         name = getattr(e, "file", None)
         if name and hasattr(obj, name):
             data.files[name] = getattr(obj, name)
+    # Scale of the image plane (3D mm per sheet mm), changed by the board's
+    # scale tool; not in the JSON: the Scale property is the reference
+    data.plane_scale = data.plane_scale_read = float(getattr(obj, "Scale", 1.0) or 1.0)
     if data.underlay is not None and hasattr(obj, model.SheetData.UNDERLAY_FILE):
         data.files[model.SheetData.UNDERLAY_FILE] = getattr(obj, model.SheetData.UNDERLAY_FILE)
     return data
@@ -145,6 +148,11 @@ class SheetFeature(object):
         if not hasattr(obj, "ImagePlane"):
             obj.addProperty("App::PropertyLink", "ImagePlane", grp,
                             "Image plane showing the sheet in the 3D view")
+        if not hasattr(obj, "Scale"):
+            obj.addProperty("App::PropertyFloat", "Scale", grp,
+                            "Size in the 3D view of one millimetre of the sheet (1 = true "
+                            "size); scaling the image plane by hand updates it")
+            obj.Scale = 1.0
         obj.setEditorMode("SheetData", 2)       # hidden: large JSON
         obj.setEditorMode("SheetWidth", 1)      # read-only
         obj.setEditorMode("SheetHeight", 1)
@@ -153,6 +161,13 @@ class SheetFeature(object):
         self.setup(obj)
 
     def onChanged(self, obj, prop):
+        if prop == "Scale":
+            if not _storing and "Restore" not in obj.State and hasattr(obj, "ImagePlane"):
+                if obj.Scale <= 0:
+                    obj.Scale = 1.0
+                    return
+                size_plane(obj)
+            return
         # Paper / resolution edited in the property view: re-render
         if prop not in ("Paper", "Resolution"):
             return
@@ -257,9 +272,26 @@ def create_sheet(doc, fmt="A4L", dpi=150, paper="transparent", plane="XZ",
     img = doc.addObject("Image::ImagePlane", obj.Name + "_Image")
     img.Label = obj.Label + " " + tr("(image)")
     img.Placement = App.Placement(App.Vector(0, 0, 0), plane_rotation(plane))
+    img.XSize, img.YSize = w, h
     obj.ImagePlane = img
+    container(doc).addObject(obj)
     update_image(obj, data)
     return obj
+
+
+def container(doc):
+    """The document's "Croquis" group, holding every sheet (created on
+    first use; a plain group, so files still open without the addon)."""
+    for o in doc.Objects:
+        if o.TypeId == "App::DocumentObjectGroup" and hasattr(o, "CroquisContainer"):
+            return o
+    grp = doc.addObject("App::DocumentObjectGroup", "Croquis_Sheets")
+    grp.Label = "Croquis"
+    grp.addProperty("App::PropertyBool", "CroquisContainer", "Croquis",
+                    "Group of the Croquis sheets of the document")
+    grp.CroquisContainer = True
+    grp.setEditorMode("CroquisContainer", 2)
+    return grp
 
 
 def update_image(obj, data):
@@ -277,14 +309,41 @@ def update_image(obj, data):
         if not compositor.save_png(data, path):
             raise IOError(tr("Could not write {path}.").format(path=path))
         img.ImageFile = path
-        img.XSize = data.width
-        img.YSize = data.height
+        adopt_manual_scale(obj)
+        size_plane(obj, data.width, data.height)
     finally:
         try:
             os.remove(path)
             os.rmdir(folder)
         except OSError:
             pass
+
+
+def adopt_manual_scale(obj):
+    """The image plane was scaled by hand (XSize no longer matches the
+    sheet width x Scale): keep that scale instead of resetting it."""
+    img = obj.ImagePlane
+    if img is None or not hasattr(obj, "Scale") or obj.SheetWidth.Value <= 0:
+        return
+    expected = obj.SheetWidth.Value * obj.Scale
+    actual = img.XSize.Value
+    if actual > 0 and abs(actual - expected) > 1e-6 * max(1.0, expected):
+        global _storing
+        _storing = True
+        try:
+            obj.Scale = actual / obj.SheetWidth.Value
+        finally:
+            _storing = False
+
+
+def size_plane(obj, width=None, height=None):
+    """Image plane size = sheet size x Scale."""
+    img = obj.ImagePlane
+    if img is None:
+        return
+    k = getattr(obj, "Scale", 1.0) or 1.0
+    img.XSize = (width if width is not None else obj.SheetWidth.Value) * k
+    img.YSize = (height if height is not None else obj.SheetHeight.Value) * k
 
 
 _storing = False
@@ -302,6 +361,14 @@ def write(obj, data):
             obj.Resolution = int(data.dpi)
     finally:
         _storing = False
+    adopt_manual_scale(obj)
+    scale = getattr(data, "plane_scale", None)
+    if scale is not None and scale != getattr(data, "plane_scale_read", None) and scale > 0:
+        _storing = True
+        try:
+            obj.Scale = scale           # set on the board (scale tool)
+        finally:
+            _storing = False
     sync_files(obj, data)
     obj.SheetData = data.to_json()
     obj.SheetWidth = data.width

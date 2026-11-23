@@ -151,3 +151,28 @@ def test_legacy_file(path, tmp_path, artifacts_dir):
         assert d.recompute() >= 0
     finally:
         App.closeDocument(d.Name)
+
+
+def test_scale_kept_when_updating(doc):
+    obj = sheet.create_sheet(doc, "A5L", 72, "white", "XY", "S")
+    assert obj.Scale == 1.0 and obj.ImagePlane.XSize.Value == 210
+    obj.ImagePlane.XSize = 420          # the user scales the image plane by hand
+    obj.ImagePlane.YSize = 296
+    data = sheet.sheet_data(obj)
+    data.strokes = strokes_for(210, 148)
+    sheet.store(obj, data)
+    assert obj.Scale == pytest.approx(2.0)
+    assert obj.ImagePlane.XSize.Value == pytest.approx(420)
+    assert obj.ImagePlane.YSize.Value == pytest.approx(296)
+    obj.Scale = 0.5                     # through the property
+    assert obj.ImagePlane.XSize.Value == pytest.approx(105)
+    sheet.update_image(obj, sheet.sheet_data(obj))
+    assert obj.ImagePlane.XSize.Value == pytest.approx(105)
+
+
+def test_sheets_grouped_in_one_container(doc):
+    a = sheet.create_sheet(doc, "A5L", 72, "white", "XY", "A")
+    b = sheet.create_sheet(doc, "A5L", 72, "white", "XZ", "B")
+    groups = [o for o in doc.Objects if o.TypeId == "App::DocumentObjectGroup"]
+    assert len(groups) == 1 and groups[0].Label == "Croquis"
+    assert groups[0].Group == [a, b]

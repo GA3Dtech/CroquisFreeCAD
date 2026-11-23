@@ -66,6 +66,8 @@ All notable changes to this project are documented here. The format follows
   in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.
 
 ### Changed
+- New sheets go into one "Croquis" group of the document instead of
+  piling up at the root of the tree.
 - Sheet format version 2 (migration from v1 on read): new `images` layer
   and `elements` list. Croquis 0.2.0 drops the `elements` of a v2 sheet when
   it saves it (it does not keep unknown fields); later versions keep them.
@@ -74,6 +76,9 @@ All notable changes to this project are documented here. The format follows
   the public API.
 
 ### Fixed
+- Updating a sketch no longer resets the size of its image plane: a sheet
+  has a `Scale` property (3D mm per sheet mm), and scaling the image plane
+  by hand updates it instead of being undone.
 - Ctrl+C / Ctrl+V on the drawing board no longer reach FreeCAD's copy /
   paste of document objects.
 

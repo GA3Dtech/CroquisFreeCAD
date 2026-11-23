@@ -176,7 +176,7 @@ def test_new_sheet_dialog_ok_and_cancel(doc):
     dlg.bridge.setValue("format", "SQ")
     dlg.accept()
     assert m.created and m.created["format"] == "SQ"
-    assert len(doc.Objects) == n + 2
+    assert len(doc.Objects) == n + 3          # sheet, image plane, Croquis group
 
 
 def test_session_transaction(doc):
