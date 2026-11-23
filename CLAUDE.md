@@ -46,6 +46,11 @@ FreeCAD restart.
   `posF()`, enums: use the scoped form through helpers).
 - Document changes go inside `doc.openTransaction(...)` /
   `commitTransaction()` (one undo step per user action).
+- **Files must open in a FreeCAD without any addon.** The `Croquis::Sheet`
+  object may become inert there, but its `Image::ImagePlane` must keep
+  showing the last render, exactly like an imported picture. Never store
+  anything the image plane needs outside standard FreeCAD properties
+  (`tests/vanilla` checks it on FreeCAD 1.0 and 26.x).
 - Sheet geometry is in **millimetres**; pixels only exist at render time
   (`SheetData.scale`). Never store pixel coordinates.
 - Marker rule: a stroke must not darken over itself, two strokes must. Each

@@ -15,6 +15,8 @@ All notable changes to this project are documented here. The format follows
 - FreeCAD integration tests run inside `freecadcmd` (`tests/run_in_freecad.py`,
   `tests/run_all.sh`): sheet creation, PNG inside the `.FCStd`, save / reopen,
   undo steps, export, legacy v0.2.0 files.
+- Vanilla tests: every file written by the addon (and every legacy file)
+  opens in a FreeCAD without the addon, with its image plane intact.
 - `model.migrate()`: format migrations, applied when a sheet is read.
 
 ### Fixed

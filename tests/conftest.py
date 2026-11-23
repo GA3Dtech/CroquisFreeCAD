@@ -10,19 +10,24 @@ import pytest
 
 TESTS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(TESTS)
-for _p in (ROOT, TESTS, os.path.join(TESTS, "fixtures")):
+# Vanilla tests check FreeCAD WITHOUT the addon: keep the repository off
+# the path (its freecad/ folder would join the namespace package)
+VANILLA = bool(os.environ.get("CROQUIS_VANILLA"))
+for _p in ((TESTS, os.path.join(TESTS, "fixtures")) if VANILLA
+           else (ROOT, TESTS, os.path.join(TESTS, "fixtures"))):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-# Inside FreeCAD the "freecad" namespace already exists: make sure this
-# repository's copy of the addon is the one imported
-try:
-    import freecad
-    _pkg = os.path.join(ROOT, "freecad")
-    if _pkg not in list(freecad.__path__):
-        freecad.__path__.insert(0, _pkg)
-except ImportError:
-    pass
+if not VANILLA:
+    # Inside FreeCAD the "freecad" namespace already exists: make sure this
+    # repository's copy of the addon is the one imported
+    try:
+        import freecad
+        _pkg = os.path.join(ROOT, "freecad")
+        if _pkg not in list(freecad.__path__):
+            freecad.__path__.insert(0, _pkg)
+    except ImportError:
+        pass
 
 
 def pytest_addoption(parser):
