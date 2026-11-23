@@ -23,8 +23,14 @@ All notable changes to this project are documented here. The format follows
 - Unknown fields, layers and tools written by a newer version of the addon
   are kept (and written back) instead of being dropped or drawn as pencil.
 
+- Public API `freecad.croquis.api` (sheets, strokes, layers, paper,
+  PNG rendering, `describe()`) with typed errors (`errors.py`), documented
+  in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.
+
 ### Changed
 - The version is read from `package.xml` only.
+- The "New sketch sheet" and "Export sheet as PNG" commands go through
+  the public API.
 
 ## [0.2.0] - 2026-11-22
 

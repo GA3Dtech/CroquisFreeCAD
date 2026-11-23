@@ -91,6 +91,24 @@ The side panel sets the paper and the visibility and opacity of each layer
 Closing the board (or *Update 3D*) writes the strokes into the document and
 regenerates the image plane, as one undo step in FreeCAD.
 
+## API for agents (MCP)
+
+`freecad.croquis.api` is a stable, headless-safe API (millimetres,
+`#rrggbb` colours, JSON-ready results, typed errors, one undo step per call).
+Full reference: [docs/api.md](docs/api.md). With the FreeCAD MCP server
+(`execute_code`), an agent can draw on an open sheet:
+
+```python
+from freecad.croquis import api
+doc = App.ActiveDocument
+s = api.create_sheet(doc, format="A4L", plane="XZ")
+api.add_strokes(s["name"], [{"tool": "spline", "points": [[30, 150], [120, 60], [260, 140]]}],
+                doc=doc)
+print(api.render_png(s["name"], doc=doc))
+```
+
+The same code runs in `freecadcmd` (`execute_code_headless`).
+
 ## Translations
 
 User-facing texts are English in the code and translated through

@@ -139,18 +139,14 @@ class NewSheetDialog(object):
 
 
 def new_sheet():
-    from . import sheet
+    from . import api, sheet
     choice = NewSheetDialog().run()
     if choice is None:
         return
     doc = App.ActiveDocument
-    doc.openTransaction(tr("New sketch sheet"))
-    try:
-        obj = sheet.create_sheet(doc, choice["fmt"], choice["dpi"], choice["paper"],
-                                 choice["plane"], choice["label"])
-    finally:
-        doc.commitTransaction()
-    doc.recompute()
+    info = api.create_sheet(doc, choice["fmt"], choice["dpi"], choice["paper"],
+                            choice["plane"], label=choice["label"])
+    obj = doc.getObject(info["name"])
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(obj)
     sheet.open_board(obj)
@@ -165,13 +161,19 @@ def edit_sheet():
 def export_png():
     import os
 
-    from . import sheet
-    from .canvas.view import export_png_dialog
+    from . import api
+    from .qt import QtWidgets
     obj = selected_sheets()[0]
     folder = os.path.dirname(obj.Document.FileName) if obj.Document.FileName \
         else os.path.expanduser("~")
-    path = export_png_dialog(Gui.getMainWindow(), sheet.sheet_data(obj),
-                             os.path.join(folder, obj.Label + ".png"))
+    path, _flt = QtWidgets.QFileDialog.getSaveFileName(
+        Gui.getMainWindow(), tr("Export sheet as PNG"),
+        os.path.join(folder, obj.Label + ".png"), tr("PNG image (*.png)"))
+    if not path:
+        return
+    if not path.lower().endswith(".png"):
+        path += ".png"
+    path = api.export_png(obj, path)
     if path:
         App.Console.PrintMessage(tr("Croquis: sheet exported to {path}").format(path=path)
                                  + "\n")

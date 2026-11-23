@@ -12,6 +12,8 @@ by a linked `Image::ImagePlane`. Read `README.md` first; the full design
 | `freecad/croquis/init_gui.py` | Workbench class, toolbar, menu, preference page |
 | `freecad/croquis/commands.py` | Gui commands (thin wrappers) |
 | `freecad/croquis/model.py` | Pure data: formats, papers, layers, tool presets, `Stroke`, `SheetData` (JSON) — no Qt, no FreeCAD |
+| `freecad/croquis/api.py` | **Public API** (stable, headless-safe, JSON results, one transaction per call); `docs/api.md` |
+| `freecad/croquis/errors.py` | Typed exceptions of the API |
 | `freecad/croquis/sheet.py` | `Croquis::Sheet` FeaturePython + ViewProvider, linked ImagePlane, PNG regeneration |
 | `freecad/croquis/render/stroke_geom.py` | Pure geometry: input smoothing, pressure from speed, Catmull-Rom, Schneider Bezier fitting, width profile, hit testing |
 | `freecad/croquis/render/brushes.py` | Draws one stroke into a QImage (raster brushes, vector strokes as dense pseudo strokes, grain) |
@@ -44,6 +46,10 @@ FreeCAD restart.
 - PySide import pattern: `from PySide import ...` with a `PySide6` fallback.
   Avoid APIs that differ between Qt5 and Qt6 (`QTabletEvent.position()` vs
   `posF()`, enums: use the scoped form through helpers).
+- **Every change of a document goes through `api.py` or the model functions
+  it uses (`sheet.write` / `sheet.store`, `sheet.create_sheet`)**: no GUI
+  code edits sheet properties directly. New features add their API
+  function (and its tests) first.
 - Document changes go inside `doc.openTransaction(...)` /
   `commitTransaction()` (one undo step per user action).
 - **Files must open in a FreeCAD without any addon.** The `Croquis::Sheet`

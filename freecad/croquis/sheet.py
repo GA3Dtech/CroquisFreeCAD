@@ -243,25 +243,47 @@ def update_image(obj, data):
 _storing = False
 
 
-def store(obj, data):
+def write(obj, data):
     """Write the strokes, paper and layers of `data` into the sheet object
-    and refresh its image, as one FreeCAD undo step."""
+    and refresh its image (inside the caller's transaction)."""
     global _storing
+    _storing = True     # no re-render from onChanged: done once below
+    try:
+        if obj.Paper != data.paper:
+            obj.Paper = data.paper
+        if int(obj.Resolution) != int(data.dpi):
+            obj.Resolution = int(data.dpi)
+    finally:
+        _storing = False
+    obj.SheetData = data.to_json()
+    obj.SheetWidth = data.width
+    obj.SheetHeight = data.height
+    update_image(obj, data)
+
+
+def store(obj, data):
+    """write() as one FreeCAD undo step."""
     doc = obj.Document
     doc.openTransaction(tr("Edit sketch sheet"))
     try:
-        _storing = True     # no re-render from onChanged: done once below
-        try:
-            if obj.Paper != data.paper:
-                obj.Paper = data.paper
-        finally:
-            _storing = False
-        obj.SheetData = data.to_json()
-        obj.SheetWidth = data.width
-        obj.SheetHeight = data.height
-        update_image(obj, data)
+        write(obj, data)
     finally:
         doc.commitTransaction()
+
+
+def plane_of(obj):
+    """"XY", "XZ", "YZ" when the image plane lies on one of them, else
+    "custom"."""
+    img = obj.ImagePlane
+    if img is None:
+        return "custom"
+    rot = img.Placement.Rotation
+    for name in PLANES:
+        ref = plane_rotation(name)
+        if all((rot.multVec(v) - ref.multVec(v)).Length < 1e-6
+               for v in (App.Vector(1, 0, 0), App.Vector(0, 1, 0))):
+            return name
+    return "custom"
 
 
 # ----------------------------------------------------------------------
