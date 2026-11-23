@@ -16,8 +16,12 @@ def qt():
 
 
 def ensure_app():
-    """A QGuiApplication (offscreen when none exists yet)."""
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    """A QGuiApplication (offscreen when none exists yet; forced when there
+    is no display, see qt.use_offscreen_without_display)."""
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    else:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     _core, QtGui = qt()
     app = QtGui.QGuiApplication.instance()
     if app is None:

@@ -22,6 +22,18 @@ QActionGroup = getattr(QtGui, "QActionGroup", None) or QtWidgets.QActionGroup
 QShortcut = getattr(QtGui, "QShortcut", None) or QtWidgets.QShortcut
 
 
+def use_offscreen_without_display():
+    """Before creating a QGuiApplication in freecadcmd: with no display,
+    Qt must use its offscreen platform. FreeCAD's AppImage launcher may set
+    QT_QPA_PLATFORM to a windowing platform (1.1: xcb), which aborts the
+    process without a display, so it is overridden here."""
+    import os
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    else:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
 def event_pos(event):
     """Position (QPointF, widget coordinates) of a mouse / tablet / wheel
     event in both Qt5 and Qt6."""
@@ -33,4 +45,4 @@ def event_pos(event):
 
 
 __all__ = ["QtCore", "QtGui", "QtWidgets", "QT6", "QUndoStack", "QUndoCommand",
-           "QAction", "QActionGroup", "QShortcut", "event_pos"]
+           "QAction", "QActionGroup", "QShortcut", "event_pos", "use_offscreen_without_display"]

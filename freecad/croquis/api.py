@@ -83,9 +83,9 @@ _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 def _ensure_qt():
     """Rendering needs a QGuiApplication: create an offscreen one in
     freecadcmd (the GUI already has its own)."""
-    from .qt import QtCore, QtGui
+    from .qt import QtCore, QtGui, use_offscreen_without_display
     if QtCore.QCoreApplication.instance() is None:
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        use_offscreen_without_display()
         _ensure_qt.app = QtGui.QGuiApplication(["croquis"])
 
 

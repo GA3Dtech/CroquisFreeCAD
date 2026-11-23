@@ -20,7 +20,10 @@ import sys
 
 
 def build(root, out):
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        os.environ["QT_QPA_PLATFORM"] = "offscreen"     # see qt.use_offscreen_without_display
+    else:
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from PySide import QtGui
     if QtGui.QGuiApplication.instance() is None:
         build._app = QtGui.QGuiApplication(["croquis-fixtures"])

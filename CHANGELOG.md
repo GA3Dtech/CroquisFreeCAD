@@ -96,6 +96,9 @@ All notable changes to this project are documented here. The format follows
   the public API.
 
 ### Fixed
+- Headless use (API in `freecadcmd`, MCP `execute_code_headless`) on a
+  machine without display no longer aborts with FreeCAD 1.1: Qt is forced
+  to its offscreen platform there (the 1.1 AppImage launcher imposes xcb).
 - "Back to this view", captures and the 3D guide stop a running camera
   animation first (with a real display the animation overwrote the camera).
 - Updating a sketch no longer resets the size of its image plane: a sheet
