@@ -160,8 +160,17 @@ class Compositor(object):
         return img
 
     def _paint_element(self, e):
-        if e.kind != "image" or id(e) in self.hidden or e.layer not in model.LAYER_KEYS:
+        if e.kind not in ("image", "text") or id(e) in self.hidden \
+                or e.layer not in model.LAYER_KEYS:
             return None
+        if e.kind == "text":
+            from . import text
+            painter = QtGui.QPainter(self._layer(e.layer))
+            try:
+                text.draw(painter, e, self.scale)
+            finally:
+                painter.end()
+            return self.element_rect(e)
         if self.export and not e.render:
             return None
         img = self.picture(e)
@@ -189,12 +198,17 @@ class Compositor(object):
         return r.intersected(self.bounds)
 
     def rebuild_layer(self, key):
+        """Pictures, then strokes (erasers included), then texts: erasers
+        never touch pictures nor texts."""
         self.layers.pop(key, None)
         for e in self.sheet.elements:
-            if getattr(e, "layer", None) == key:
+            if getattr(e, "layer", None) == key and e.kind == "image":
                 self._paint_element(e)
         for s in self.sheet.layer_strokes(key):
             self._paint_stroke(s, only=key)
+        for e in self.sheet.elements:
+            if getattr(e, "layer", None) == key and e.kind == "text":
+                self._paint_element(e)
 
     def rebuild(self):
         self.layers = {}
@@ -239,7 +253,11 @@ class Compositor(object):
     # --- edits
     def add_stroke(self, stroke):
         """The stroke was appended to the sheet: paint it, recompose its
-        area. Returns the dirty QRect (or None)."""
+        area. Returns the dirty QRect (or None). Texts stay above the
+        strokes of their layer: a layer holding texts is repainted."""
+        if any(e.kind == "text" and e.layer in self.stroke_layers(stroke)
+               for e in self.sheet.elements):
+            return self.refresh_strokes([stroke])
         r = self._paint_stroke(stroke)
         if r is not None:
             self.compose(r)

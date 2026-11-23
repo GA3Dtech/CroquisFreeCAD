@@ -195,3 +195,34 @@ def test_reference_image(spec, update_golden, artifacts_dir):
     ok, msg = compare(img, os.path.join(GOLDEN, spec["label"] + ".png"), spec["label"],
                       artifacts_dir, update=update_golden)
     assert ok, msg
+
+
+def test_text_box_rendered_in_its_box():
+    from freecad.croquis.render import text
+    sheet = model.SheetData(120, 60, 150, "transparent")
+    e = model.TextElement("t", "Croquis", 20, 15, w=0, size=8, color="#000000",
+                          leader=[100, 50])
+    text.fit(e)
+    assert e.h == pytest.approx(8, rel=0.5) and e.w > 20
+    sheet.elements = [e]
+    arr = render(sheet)
+    ys, xs = np.nonzero(arr[:, :, 3] > 128)
+    s = sheet.scale
+    glyphs = (xs < (e.x + e.w + 1) * s) & (ys < (e.y + e.h + 1) * s)
+    assert glyphs.sum() > 100
+    gx, gy = xs[glyphs], ys[glyphs]
+    assert gx.min() >= (e.x - 1) * s and gy.min() >= (e.y - 1) * s
+    assert (gy.max() - gy.min()) / s <= e.h + 1             # glyph height within the line
+    X, Y = px(sheet, 99, 49)
+    assert arr[Y - 3:Y + 4, X - 3:X + 4, 3].max() > 0       # the callout reaches its target
+
+
+def test_eraser_does_not_erase_text():
+    sheet = model.SheetData(80, 40, 150, "transparent")
+    e = model.TextElement("t", "MMMM", 10, 10, w=0, size=10, color="#000000")
+    from freecad.croquis.render import text
+    text.fit(e)
+    sheet.elements = [e]
+    before = int((render(sheet)[:, :, 3] > 128).sum())
+    sheet.strokes = [stroke("eraser", [(0, 15, 1), (80, 15, 1)], size=20)]
+    assert int((render(sheet)[:, :, 3] > 128).sum()) == before

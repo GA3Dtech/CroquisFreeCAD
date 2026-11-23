@@ -596,7 +596,19 @@ class EditTool(Tool):
 
     def _is_image(self, obj=None):
         obj = self.selection if obj is None else obj
-        return getattr(obj, "kind", None) == "image"
+        return getattr(obj, "kind", None) in ("image", "text")
+
+    def _is_text(self, obj=None):
+        obj = self.selection if obj is None else obj
+        return getattr(obj, "kind", None) == "text"
+
+    def _text_handles(self, e):
+        """Wrap width handle (right side) and callout target, in mm."""
+        x0, y0, x1, y1 = e.box()
+        out = [("wrap", (x1, (y0 + y1) / 2.0))]
+        if e.leader:
+            out.append(("leader", tuple(e.leader)))
+        return out
 
     # --- images
     def _handle_mm(self):
@@ -604,6 +616,12 @@ class EditTool(Tool):
 
     def _pick_image_handle(self, pos):
         if not self._is_image():
+            return None
+        if self._is_text():
+            for mode, p in self._text_handles(self.selection):
+                w = self.c.to_widget(p)
+                if math.hypot(pos.x() - w.x(), pos.y() - w.y()) <= HANDLE_PX:
+                    return mode
             return None
         corners, rot, _top = image_handles(self.selection, self._handle_mm())
         for mode, p in [("rotate", rot)] + list(enumerate(corners)):
@@ -626,6 +644,12 @@ class EditTool(Tool):
         e = orig.copy()
         if mode == "move":
             e.x, e.y = orig.x + x - x0, orig.y + y - y0
+        elif mode == "wrap":
+            from ..render import text as text_mod
+            e.w = max(5.0, x - e.x)
+            text_mod.fit(e)
+        elif mode == "leader":
+            e.leader = [x, y]
         elif mode == "rotate":
             cx, cy = orig.x + orig.w / 2.0, orig.y + orig.h / 2.0
             ang = math.degrees(math.atan2(y - cy, x - cx)) + 90.0
@@ -656,8 +680,7 @@ class EditTool(Tool):
         self._move_image(pos, mods)
         old, new = self.selection, self.ipreview
         self._end_image_drag()
-        changed = any(abs(getattr(old, k) - getattr(new, k)) > 1e-6
-                      for k in ("x", "y", "w", "h", "rotation"))
+        changed = old.to_dict() != new.to_dict()
         if changed:
             self.c.undo_stack.push(undo.ReplaceElement(self.c, old, new))
         else:
@@ -697,6 +720,11 @@ class EditTool(Tool):
                 return
         index = self._pick_handle(pos) if not self._is_image() else None
         if index is None:
+            txt = c.pick_text(pos)
+            if txt is not None:
+                self.select(txt)
+                self._start_image_drag("move", pos)
+                return
             hit = c.pick_stroke(pos, kinds=("vector",))
             if hit is None:
                 img = c.pick_image(pos)
@@ -806,6 +834,23 @@ class EditTool(Tool):
             self.c.draw_element(painter, self.ipreview)
 
     def paint_overlay(self, painter):
+        if self._is_text():
+            e = self.ipreview if self.ipreview is not None else self.selection
+            x0, y0, x1, y1 = e.box()
+            a, b = self.c.to_widget((x0, y0)), self.c.to_widget((x1, y1))
+            blue = QtGui.QColor(45, 123, 229)
+            painter.setBrush(QtCore.Qt.NoBrush)
+            painter.setPen(QtGui.QPen(blue, 1.2, QtCore.Qt.DashLine))
+            painter.drawRect(QtCore.QRectF(a, b))
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 1))
+            painter.setBrush(blue)
+            for mode, p in self._text_handles(e):
+                w = self.c.to_widget(p)
+                if mode == "wrap":
+                    painter.drawRect(QtCore.QRectF(w.x() - 3, w.y() - 6, 6, 12))
+                else:
+                    painter.drawEllipse(w, 5.0, 5.0)
+            return
         if self._is_image():
             e = self.ipreview if self.ipreview is not None else self.selection
             corners, rot, top = image_handles(e, self._handle_mm())
@@ -837,6 +882,26 @@ class EditTool(Tool):
                 painter.drawRect(QtCore.QRectF(p.x() - 3.5, p.y() - 3.5, 7, 7))
             else:
                 painter.drawEllipse(p, 3.0, 3.0)
+
+
+# ----------------------------------------------------------------------
+#  Text boxes
+# ----------------------------------------------------------------------
+class TextTool(Tool):
+    """Click to write a text box there (click a text to edit it). While
+    typing every key goes to the text; Escape, Ctrl+Return or a click
+    elsewhere validates. Font, size, style, colour, frame and callout
+    arrow come from the text panel."""
+
+    show_size = False
+
+    def press(self, pos, pressure, mods):
+        c = self.c
+        hit = c.pick_text(pos)
+        if hit is not None:
+            c.edit_text(hit)
+        else:
+            c.edit_text(c.new_text(*c.to_mm(pos)), new=True)
 
 
 # ----------------------------------------------------------------------
@@ -904,6 +969,8 @@ def make_tool(canvas, key):
         return EditTool(canvas, key)
     if key == "scale":
         return ScaleTool(canvas, key)
+    if key == "text":
+        return TextTool(canvas, key)
     kind = model.tool_kind(key)
     if kind == "vector":
         straight = key == "line" or (key == "arrow" and

@@ -35,7 +35,9 @@ Version 0.2.
 | Manual 3D view capture onto a new sheet or the open board, camera kept ("Back to this view") | done (v0.3) |
 | Arrows: straight or curved, heads at the start / end, open / filled / dot | done (v0.3) |
 | 3D view guide under the strokes, aligned on the sheet plane in true size, never exported | done (v0.3) |
-| Camera-aligned guide (overpaint), text and callouts | v0.3 (next) |
+| Text boxes and callouts: font, size, bold, italic, colour, alignment, wrapping, frame, background | done (v0.3) |
+| Scale tool (real length of a segment), sheets from a 3D view placed on the view at scale | done (v0.3) |
+| Camera-aligned guide for an existing sheet | next |
 | Ellipses, perspective grids | later |
 | SVG export, TechDraw, chisel tip, custom palettes | v0.4 |
 
@@ -79,6 +81,8 @@ picture.
 | `L` | Straight line | Lines | Tapered vector line, drag from end to end; `Shift` snaps to 15°. |
 | `S` | Spline stroke | Lines | Thin, wide in the middle, pointed. *Freehand* is smoothed into Bezier curves; *Control points*: click the points, click the last one again (or double-click, `Enter`, right-click) to finish, `Backspace` removes the last point, `Esc` cancels. |
 | `A` | Arrow | Lines | Straight (drag tail to tip, `Shift` 15°) or curved (freehand or control points); heads at the end and / or start, open, filled or dot; editable with `V`. |
+| `T` | Text box | Lines | Click to write (Escape or a click elsewhere validates, double-click to edit); font, size, bold, italic, colour, alignment, wrap width, frame, white background and callout arrow in the text panel; with `V`, drag the box, its width handle or the callout tip. |
+| `K` | Scale | – | Drag over something of known size and type its real length: the sheet takes the right size in 3D (shown as "3D scale 1:n"). |
 | `E` | Eraser | All or one | *Soft* removes pixels; *Whole strokes* deletes every stroke it touches. |
 | `V` | Edit vector strokes | – | Click a line or spline: drag its anchors, handles or the whole stroke; colour, size, opacity and width profile apply to it; `Delete` removes it. |
 

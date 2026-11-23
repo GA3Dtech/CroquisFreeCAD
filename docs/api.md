@@ -47,6 +47,9 @@ from freecad.croquis import api
 | `delete_image_element(sheet, image_id, doc=None)` | metadata |
 | `capture_3d_view(doc=None, width_px=None, height_px=None, background="current", hide_sheets=True, target_sheet=None, factor=1.0)` | **GUI.** `{"sheet", "image", "camera"}` — picture of the document's 3D view on a new sheet (or `target_sheet`), camera kept |
 | `restore_image_view(sheet, image_id, doc=None)` | **GUI.** the camera; puts the 3D view back where the picture was captured |
+| `add_text(sheet, text, x_mm, y_mm, width_mm=None, size_mm=5.0, color="#1b1b1d", font="Sans Serif", bold=False, italic=False, align="left", frame=False, background=False, leader_to=None, layer="lines", doc=None)` | the text element (`h` computed); `leader_to` [x, y] adds a callout arrow |
+| `list_texts(sheet, doc=None)` / `edit_text(sheet, text_id, doc=None, **changes)` / `delete_text(sheet, text_id, doc=None)` | elements / element / metadata |
+| `set_scale(sheet, scale=None, segment=None, length_mm=None, doc=None)` | metadata — 3D size of the sheet, from a value or a segment of known real length |
 | `capture_underlay(sheet, mode="plane", style="edges", opacity=0.4, hide_sheets=True, doc=None)` | **GUI.** metadata — 3D view guide along the sheet's normal, true size, never exported (`style`: edges, wireframe, shaded) |
 | `refresh_underlay(sheet, doc=None)` | **GUI.** metadata — captured again with the stored settings |
 | `clear_underlay(sheet, doc=None)` | metadata |

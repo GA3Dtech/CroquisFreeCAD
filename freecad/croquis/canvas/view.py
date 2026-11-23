@@ -54,6 +54,7 @@ BOARD_TOOLS = [
     ("line", "Line.svg", QtCore.Qt.Key_L),
     ("spline", "Spline.svg", QtCore.Qt.Key_S),
     ("arrow", "Arrow.svg", QtCore.Qt.Key_A),
+    ("text", "Text.svg", QtCore.Qt.Key_T),
     ("eraser", "Eraser.svg", QtCore.Qt.Key_E),
     ("edit", "EditStroke.svg", QtCore.Qt.Key_V),
     ("scale", "Scale.svg", QtCore.Qt.Key_K),
@@ -91,6 +92,8 @@ def tool_label(key):
         return tr("Edit vector strokes")
     if key == "scale":
         return tr("Scale: give a real length")
+    if key == "text":
+        return tr("Text box")
     return tr_data(model.TOOLS[key]["label"])
 
 
@@ -108,7 +111,73 @@ def default_settings():
     out["spline"]["mode"] = "freehand"
     out["eraser"]["mode"] = "soft"
     out["eraser"]["target"] = model.ALL_LAYERS
+    out["text"] = {"color": "#1b1b1d", "size": 5.0, "opacity": 1.0, "font": "Sans Serif",
+                   "bold": False, "italic": False, "align": "left", "frame": False,
+                   "background": False, "leader": False, "w": 0.0}
     return out
+
+
+class TextEditor(QtWidgets.QPlainTextEdit):
+    """Typing field laid over the board while a text box is written. It
+    keeps every key (tool letters, Delete, Backspace, Return...: no tool
+    change, no FreeCAD shortcut); Escape, Ctrl+Return or a click elsewhere
+    validates."""
+
+    def __init__(self, canvas, element, new):
+        QtWidgets.QPlainTextEdit.__init__(self, canvas)
+        self.canvas = canvas
+        self.element = element
+        self.new = new
+        self.done = False
+        self.setObjectName("croquis_text_editor")
+        self.setFrameStyle(QtWidgets.QFrame.NoFrame)
+        self.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self.setStyleSheet("background: rgba(255, 255, 230, 200); color: %s;" % element.color)
+        self.setPlainText(element.text)
+        self.textChanged.connect(self.place)
+        self.place()
+
+    def place(self):
+        from ..render import text as text_mod
+        c, e = self.canvas, self.element
+        k = c.scale * c.zoom
+        self.setFont(text_mod.font_for(e, k))
+        fm = QtGui.QFontMetricsF(self.font())
+        lines = self.toPlainText().split("\n") or [""]
+        natural = max(fm.horizontalAdvance(ln) if hasattr(fm, "horizontalAdvance")
+                      else fm.width(ln) for ln in lines)
+        w = e.w * k if e.w > 0 else natural + fm.averageCharWidth() * 3
+        # QPlainTextEdit's document size is counted in lines
+        doc_h = self.document().size().height() * fm.lineSpacing()
+        p = c.to_widget((e.x, e.y))
+        self.setGeometry(int(p.x()) - 4, int(p.y()) - 4, int(max(w, 60)) + 12,
+                         int(max(doc_h, fm.lineSpacing()) + fm.lineSpacing()) + 8)
+
+    def event(self, event):
+        if event.type() == QtCore.QEvent.ShortcutOverride:
+            mods = event.modifiers()
+            if not (mods & (QtCore.Qt.ControlModifier | QtCore.Qt.AltModifier)) or \
+                    int(event.key()) in (int(QtCore.Qt.Key_Z), int(QtCore.Qt.Key_Y),
+                                         int(QtCore.Qt.Key_C), int(QtCore.Qt.Key_V),
+                                         int(QtCore.Qt.Key_X), int(QtCore.Qt.Key_A)):
+                event.accept()
+                return True
+        return QtWidgets.QPlainTextEdit.event(self, event)
+
+    def keyPressEvent(self, event):
+        k = int(event.key())
+        if k == int(QtCore.Qt.Key_Escape) or (
+                k in (int(QtCore.Qt.Key_Return), int(QtCore.Qt.Key_Enter))
+                and event.modifiers() & QtCore.Qt.ControlModifier):
+            self.canvas.commit_text()
+            return
+        QtWidgets.QPlainTextEdit.keyPressEvent(self, event)
+
+    def focusOutEvent(self, event):
+        QtWidgets.QPlainTextEdit.focusOutEvent(self, event)
+        if not self.done and event.reason() != QtCore.Qt.PopupFocusReason:
+            QtCore.QTimer.singleShot(0, self.canvas.commit_text)
 
 
 class SheetCanvas(QtWidgets.QWidget):
@@ -133,6 +202,7 @@ class SheetCanvas(QtWidgets.QWidget):
         self._fitted = False
         self._checker = _checker_brush()
         self._live_img = None
+        self.editor = None          # TextEditor while a text box is typed
         self._region = None         # repaint region of the paint in progress
         self._input = None          # "tablet" / "mouse" while a button is down
         self._curve = 1.0
@@ -220,6 +290,7 @@ class SheetCanvas(QtWidgets.QWidget):
     def set_tool(self, key):
         if key == self.tool:
             return
+        self.commit_text()
         self.handler.cancel()
         self.tool = key
         self.handler = tools.make_tool(self, key)
@@ -240,6 +311,10 @@ class SheetCanvas(QtWidgets.QWidget):
         sel = self.selection()
         return sel if getattr(sel, "kind", None) == "image" else None
 
+    def selected_text(self):
+        sel = self.selection()
+        return sel if getattr(sel, "kind", None) == "text" else None
+
     def current(self):
         """Settings shown in the toolbar: those of the selected stroke in
         the edit tool, else those of the tool."""
@@ -247,6 +322,11 @@ class SheetCanvas(QtWidgets.QWidget):
         if sel is not None and getattr(sel, "kind", None) == "image":
             d = dict(self.tool_settings["spline"])
             d["opacity"] = sel.opacity
+            return d
+        if sel is not None and getattr(sel, "kind", None) == "text":
+            d = dict(self.tool_settings["text"])
+            d.update(dict((k, getattr(sel, k)) for k in d if hasattr(sel, k)))
+            d["leader"] = bool(sel.leader)
             return d
         if sel is not None:
             d = {"color": sel.color, "size": sel.size, "opacity": sel.opacity}
@@ -261,6 +341,10 @@ class SheetCanvas(QtWidgets.QWidget):
         if self.selected_image() is not None:
             if name == "opacity":
                 self.set_image(opacity=value, merge_key="opacity")
+            return
+        if self.selected_text() is not None:
+            if name in ("color", "size", "opacity"):
+                self.set_text(merge_key=name, **{name: value})
             return
         if sel is not None:
             new = sel.copy()
@@ -368,7 +452,15 @@ class SheetCanvas(QtWidgets.QWidget):
         return None
 
     def draw_element(self, p, e):
-        """Paint an image element through the view transform (preview)."""
+        """Paint an element through the view transform (preview)."""
+        if e.kind == "text":
+            from ..render import text as text_mod
+            p.save()
+            p.translate(self.offset)
+            p.scale(self.zoom, self.zoom)
+            text_mod.draw(p, e, self.scale)
+            p.restore()
+            return
         img = self.compositor.picture(e)
         if img is None:
             return
@@ -398,6 +490,82 @@ class SheetCanvas(QtWidgets.QWidget):
         """FreeCAD document of the sheet being drawn (set by the board)."""
         import FreeCAD as App
         return App.getDocument(self.doc_name)
+
+    # ------------------------------------------------------------------
+    #  Text boxes
+    # ------------------------------------------------------------------
+    def pick_text(self, pos):
+        x, y = self.to_mm(pos)
+        for e in reversed(self.sheet.elements):
+            if getattr(e, "kind", None) == "text" and not e.locked and e.contains(x, y) \
+                    and self.sheet.layers.get(e.layer, {}).get("visible", True):
+                return e
+        return None
+
+    def new_text(self, x, y):
+        """Text box element at (x, y) mm with the text tool's settings."""
+        st = self.tool_settings["text"]
+        e = model.TextElement(self.sheet.new_id("txt"), "", x, y, w=st["w"], font=st["font"],
+                              size=st["size"], bold=st["bold"], italic=st["italic"],
+                              color=st["color"], opacity=st["opacity"], align=st["align"],
+                              frame=st["frame"], background=st["background"])
+        if st["leader"]:
+            e.leader = [x - 15.0, y + 20.0]
+        return e
+
+    def edit_text(self, element, new=False):
+        """Open the typing field on a text box (new or existing)."""
+        self.commit_text()
+        if not new:
+            self.compositor.hidden.add(id(element))
+            self.sheet_changed(self.compositor.refresh_elements([element]))
+        self.editor = TextEditor(self, element.copy() if not new else element, new)
+        self.editor.original = element
+        self.editor.show()
+        self.editor.setFocus()
+
+    def commit_text(self):
+        """Validate the typing field: add, change or (when emptied) remove
+        the text box, as one undo step."""
+        from ..render import text as text_mod
+        ed = self.editor
+        if ed is None or ed.done:
+            return
+        ed.done = True
+        self.editor = None
+        text = ed.toPlainText().rstrip()
+        e, orig = ed.element, ed.original
+        ed.hide()
+        ed.deleteLater()
+        self.compositor.hidden.discard(id(orig))
+        if ed.new:
+            if text.strip():
+                e.text = text
+                text_mod.fit(e)
+                self.undo_stack.push(undo.AddElement(self, e, tr("Add text")))
+        elif not text.strip():
+            self.undo_stack.push(undo.RemoveElements(self, [orig]))
+        elif text != orig.text:
+            e.text = text
+            text_mod.fit(e)
+            self.undo_stack.push(undo.ReplaceElement(self, orig, e))
+        else:
+            self.sheet_changed(self.compositor.refresh_elements([orig]))
+        self.setFocus()
+
+    def set_text(self, merge_key=None, **changes):
+        """Change the selected text box (one undo step, consecutive changes
+        of one setting merged)."""
+        from ..render import text as text_mod
+        e = self.selected_text()
+        if e is None:
+            return
+        new = e.copy()
+        for k, v in changes.items():
+            setattr(new, k, v)
+        text_mod.fit(new)
+        self.undo_stack.push(undo.ReplaceElement(self, e, new, merge_key))
+        self.settingsChanged.emit()
 
     def add_picture(self, img, path=None, centre_mm=None, camera=None):
         """New image element from a QImage (paste, drop, capture): fitted
@@ -607,6 +775,9 @@ class SheetCanvas(QtWidgets.QWidget):
     #  Mouse
     # ------------------------------------------------------------------
     def mousePressEvent(self, event):
+        if self.editor is not None:         # a click elsewhere validates the text
+            self.commit_text()
+            return
         if self._input == "tablet":
             return
         pos = event_pos(event)
@@ -644,6 +815,12 @@ class SheetCanvas(QtWidgets.QWidget):
             self.handler.release(event_pos(event), None, event.modifiers())
 
     def mouseDoubleClickEvent(self, event):
+        if self.tool in ("edit", "text") and event.button() == QtCore.Qt.LeftButton:
+            e = self.pick_text(event_pos(event))
+            if e is not None:
+                self.handler.cancel()
+                self.edit_text(e)
+                return
         dbl = getattr(self.handler, "double_click", None)
         if dbl is not None and event.button() == QtCore.Qt.LeftButton:
             dbl(event_pos(event))
@@ -884,6 +1061,9 @@ class SheetBoard(QtWidgets.QWidget):
         self.image_panel, self.image_bridge, self.image_kind = qml_host.build_panel(
             panels.image_model(self.canvas), self.side)
         side.addWidget(self.image_panel)
+        self.text_panel, self.text_bridge, self.text_kind = qml_host.build_panel(
+            panels.text_model(self.canvas), self.side)
+        side.addWidget(self.text_panel)
         self.layers, self.layers_kind = self._layers_panel()
         side.addWidget(self.layers, 1)
         self.status = QtWidgets.QLabel()
@@ -1051,6 +1231,10 @@ class SheetBoard(QtWidgets.QWidget):
         self.image_panel.setVisible(image)
         if image:
             self.image_bridge.refresh()
+        texting = c.tool == "text" or c.selected_text() is not None
+        self.text_panel.setVisible(texting)
+        if texting:
+            self.text_bridge.refresh()
         for w in (self.color_btn, self.swatches, self.size_spin):
             w.setEnabled(not editing_nothing and not image)
 

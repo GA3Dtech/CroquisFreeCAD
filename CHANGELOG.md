@@ -57,6 +57,11 @@ All notable changes to this project are documented here. The format follows
 - Arrow tool (`A`): straight or curved vector arrows, heads at the start
   and / or end (open, filled, dot, size), editable with the edit tool.
 - API 1.3: `add_arrow`; strokes accept `"heads"` for arrows.
+- Text tool (`T`): text boxes with font, size (mm), bold, italic, colour,
+  alignment, wrap width, frame, white background and callout arrow (its tip
+  stays put when the box moves); typing keeps every key (no tool change, no
+  FreeCAD shortcut); texts stay above strokes and erasers. API 1.6:
+  `add_text`, `list_texts`, `edit_text`, `delete_text`.
 - Scale tool (`K`) on the board: drag over something of known size, type
   its real length, and the sheet takes the right size in 3D; the scale is
   shown in the status line. API 1.5: `set_scale` (value or segment +

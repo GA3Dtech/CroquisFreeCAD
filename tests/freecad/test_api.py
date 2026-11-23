@@ -236,3 +236,22 @@ def test_set_scale(doc, sheet):
                {"segment": "x", "length_mm": 5}):
         with pytest.raises(errors.InvalidArgumentError):
             api.set_scale(n, doc=doc, **kw)
+
+
+def test_text_api(doc, sheet):
+    n = sheet["name"]
+    t = api.add_text(n, "Note", 20, 30, size_mm=6, bold=True, frame=True,
+                     leader_to=[150, 120], doc=doc)
+    assert t["h"] > 0 and t["w"] > 0 and t["leader"] == [150, 120] and t["bold"]
+    t2 = api.add_text(n, "A long text that wraps", 20, 60, width_mm=30, doc=doc)
+    assert t2["w"] == 30 and t2["h"] > 6                    # wrapped on several lines
+    e = api.edit_text(n, t["id"], text="Note 2", italic=True, color="#C03030", doc=doc)
+    assert e["text"] == "Note 2" and e["italic"] and e["color"] == "#c03030"
+    assert [x["id"] for x in api.list_texts(n, doc=doc)] == [t["id"], t2["id"]]
+    for bad in ({"align": "justify"}, {"size": 0}, {"colour": "red"}, {"leader": "x"}):
+        with pytest.raises(errors.InvalidArgumentError):
+            api.edit_text(n, t["id"], doc=doc, **bad)
+    arr = to_array(load(doc.getObject(sheet["image_plane"]).ImageFile))
+    assert (arr[:, :, 0] < 100).sum() > 50                   # the texts are in the image plane
+    api.delete_text(n, t2["id"], doc=doc)
+    assert api.get_sheet(n, doc=doc)["texts"] == 1

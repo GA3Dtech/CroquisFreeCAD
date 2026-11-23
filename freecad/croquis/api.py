@@ -72,7 +72,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.5.0"
+API_VERSION = "1.6.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -173,6 +173,7 @@ def _sheet_info(obj):
         "image_plane": obj.ImagePlane.Name if obj.ImagePlane is not None else None,
         "strokes": len(data.strokes),
         "images": len(data.images()),
+        "texts": len(data.texts()),
         "scale": float(getattr(obj, "Scale", 1.0)),
         "underlay": data.underlay,
         "strokes_per_layer": counts,
@@ -687,6 +688,120 @@ def delete_image_element(sheet, image_id, doc=None):
 
 
 # ----------------------------------------------------------------------
+#  Text boxes and callouts
+# ----------------------------------------------------------------------
+TEXT_FIELDS = ("text", "x", "y", "w", "size", "font", "bold", "italic", "color", "opacity",
+               "align", "frame", "background", "layer", "leader", "locked")
+
+
+def _check_text_fields(fields):
+    out = {}
+    for k, v in fields.items():
+        if k not in TEXT_FIELDS:
+            raise InvalidArgumentError("unknown text field %r" % (k,))
+        if k in ("text", "font"):
+            if not isinstance(v, str):
+                raise InvalidArgumentError("%s must be a string" % k)
+        elif k in ("bold", "italic", "frame", "background", "locked"):
+            if not isinstance(v, bool):
+                raise InvalidArgumentError("%s must be True or False" % k)
+        elif k == "color":
+            if not isinstance(v, str) or not _COLOR.match(v):
+                raise InvalidArgumentError("color must be '#rrggbb', got %r" % (v,))
+            v = v.lower()
+        elif k == "align":
+            if v not in model.TEXT_ALIGNS:
+                raise InvalidArgumentError("align must be one of %s" % ", ".join(model.TEXT_ALIGNS))
+        elif k == "layer":
+            if v not in model.ERASABLE_LAYERS:
+                raise InvalidArgumentError("layer must be one of %s"
+                                           % ", ".join(model.ERASABLE_LAYERS))
+        elif k == "leader":
+            if v is not None:
+                try:
+                    v = [_num(v[0], "leader x"), _num(v[1], "leader y")]
+                except (TypeError, IndexError):
+                    raise InvalidArgumentError("leader must be [x, y] or None")
+        elif k == "size":
+            v = _num(v, k, 0.2, 500)
+        elif k == "w":
+            v = _num(v, k, 0, 10000)
+        elif k == "opacity":
+            v = _num(v, k, 0, 1)
+        else:
+            v = _num(v, k)
+        out[k] = v
+    return out
+
+
+def _text_out(e):
+    return e.to_dict()
+
+
+def _find_text(data, text_id):
+    for e in data.texts():
+        if e.id == text_id:
+            return e
+    raise InvalidArgumentError("no text %r on the sheet" % (text_id,))
+
+
+def add_text(sheet, text, x_mm, y_mm, width_mm=None, size_mm=5.0, color="#1b1b1d",
+             font="Sans Serif", bold=False, italic=False, align="left", frame=False,
+             background=False, leader_to=None, layer="lines", doc=None):
+    """Text box with its top left corner at (x_mm, y_mm); width_mm wraps
+    the lines (None: no wrapping); size_mm is the height of a line. With
+    leader_to [x, y], a callout arrow goes from the box to that point.
+    Returns the text element (with its computed height h)."""
+    from .render import text as text_mod
+    fields = _check_text_fields({"text": text, "x": x_mm, "y": y_mm,
+                                 "w": 0.0 if width_mm is None else width_mm, "size": size_mm,
+                                 "color": color, "font": font, "bold": bold, "italic": italic,
+                                 "align": align, "frame": frame, "background": background,
+                                 "leader": leader_to, "layer": layer})
+    _ensure_qt()
+
+    def change(data):
+        e = model.TextElement(data.new_id("txt"), "", 0, 0)
+        for k, v in fields.items():
+            setattr(e, k, v)
+        text_mod.fit(e)
+        data.elements.append(e)
+        return e
+    return _text_out(_edit(sheet, doc, tr("Edit sketch sheet"), change))
+
+
+def list_texts(sheet, doc=None):
+    """Text elements of a sheet."""
+    from . import sheet as sheet_mod
+    return [_text_out(e) for e in sheet_mod.sheet_data(_sheet(sheet, doc)).texts()]
+
+
+def edit_text(sheet, text_id, doc=None, **changes):
+    """Change a text element (fields of add_text by their element names:
+    text, x, y, w, size, font, bold, italic, color, opacity, align, frame,
+    background, layer, leader, locked). Returns the element."""
+    from .render import text as text_mod
+    fields = _check_text_fields(changes)
+    _ensure_qt()
+
+    def change(data):
+        e = _find_text(data, text_id)
+        for k, v in fields.items():
+            setattr(e, k, v)
+        text_mod.fit(e)
+        return e
+    return _text_out(_edit(sheet, doc, tr("Edit sketch sheet"), change))
+
+
+def delete_text(sheet, text_id, doc=None):
+    """Remove a text element."""
+    def change(data):
+        data.elements.remove(_find_text(data, text_id))
+    _edit(sheet, doc, tr("Edit sketch sheet"), change)
+    return get_sheet(sheet, doc)
+
+
+# ----------------------------------------------------------------------
 #  3D view capture (GUI)
 # ----------------------------------------------------------------------
 def capture_3d_view(doc=None, width_px=None, height_px=None, background="current",
@@ -870,8 +985,8 @@ PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper",
           "list_strokes", "add_strokes", "add_arrow", "delete_strokes", "add_image",
           "new_sheet_from_image", "list_images", "update_image_element",
           "delete_image_element", "capture_3d_view", "restore_image_view", "capture_underlay",
-          "refresh_underlay", "clear_underlay", "set_scale", "render_png", "export_png",
-          "describe"]
+          "refresh_underlay", "clear_underlay", "set_scale", "add_text", "list_texts",
+          "edit_text", "delete_text", "render_png", "export_png", "describe"]
 
 GUI_ONLY = ["capture_3d_view", "restore_image_view", "capture_underlay", "refresh_underlay"]
 

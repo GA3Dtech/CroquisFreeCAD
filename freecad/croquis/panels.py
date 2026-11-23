@@ -26,6 +26,7 @@ hand twice. The models call api.py; they hold no drawing logic.
     image_model(canvas)         properties of the selected picture
     capture_model(doc, board)   "Capture 3D view" dialog
     guide_model(board)          "3D view guide" dialog of the board
+    text_model(canvas)          text box settings (selected box, or new ones)
 """
 
 from . import model, prefs
@@ -378,3 +379,64 @@ class GuideModel(PanelModel):
 
 def guide_model(board):
     return GuideModel(board)
+
+
+
+# ----------------------------------------------------------------------
+#  Text boxes
+# ----------------------------------------------------------------------
+def text_model(canvas):
+    """Font, size, bold, italic, colour, alignment, wrapping width, frame,
+    white background and callout arrow: of the selected text box (edit
+    tool), else of the next ones (text tool)."""
+    from .render import text as text_mod
+    c = canvas
+
+    def get(name):
+        def g():
+            e = c.selected_text()
+            if e is not None:
+                return bool(e.leader) if name == "leader" else getattr(e, name)
+            return c.tool_settings["text"][name]
+        return g
+
+    def put(name):
+        def s(value):
+            e = c.selected_text()
+            if e is None:
+                c.tool_settings["text"][name] = value
+                return
+            if name == "leader":
+                x0, _y0, _x1, y1 = e.box()
+                value = [x0 - 15.0, y1 + 20.0] if value else None
+            c.set_text(merge_key=name, **{name: value})
+        return s
+
+    fonts = text_mod.available_fonts()
+
+    def font_options():
+        current = get("font")()
+        names = fonts if current in fonts else [current] + fonts
+        return [(f, f) for f in names]
+
+    params = [
+        Param("font", tr("Font:"), "choice", get("font"), put("font"), options=font_options()),
+        Param("size", tr("Size:"), "number", get("size"), put("size"), min=0.5, max=200,
+              step=0.5, decimals=1, unit="mm", tip=tr("Height of a line of text on the sheet")),
+        Param("bold", tr("Bold"), "bool", get("bold"), put("bold")),
+        Param("italic", tr("Italic"), "bool", get("italic"), put("italic")),
+        Param("color", tr("Colour:"), "color", get("color"), put("color")),
+        Param("align", tr("Alignment:"), "choice", get("align"), put("align"),
+              options=[("left", tr("Left")), ("center", tr("Centre")), ("right", tr("Right"))]),
+        Param("w", tr("Wrap width:"), "number", get("w"), put("w"), min=0, max=2000, step=5,
+              decimals=1, unit="mm", tip=tr("0: no wrapping, one line per paragraph")),
+        Param("frame", tr("Frame"), "bool", get("frame"), put("frame")),
+        Param("background", tr("White background"), "bool", get("background"),
+              put("background")),
+        Param("leader", tr("Callout arrow"), "bool", get("leader"), put("leader"),
+              tip=tr("An arrow from the box to a point; drag its tip with the edit tool "
+                     "(V). Moving the box keeps the tip in place.")),
+    ]
+    return PanelModel(tr("Text"), params,
+                      hint=lambda: tr("Click on the sheet to write; Escape or a click "
+                                      "elsewhere validates. Double-click a text to edit it."))

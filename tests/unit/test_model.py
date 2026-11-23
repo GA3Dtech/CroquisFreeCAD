@@ -245,3 +245,19 @@ def test_arrow_stroke_params_and_bounds():
     assert s.bounds()[2] == pytest.approx(10 + 1.0 + head)
     again = model.Stroke.from_dict(s.to_dict())
     assert again.profile() == prof
+
+
+def test_text_element():
+    e = model.TextElement("t1", "Hello\nworld", 10, 20, w=40, h=12, size=5, frame=True,
+                          leader=[0, 60], bold=True)
+    assert e.pad == pytest.approx(1.75)
+    assert e.box() == pytest.approx((8.25, 18.25, 51.75, 33.75))
+    assert e.contains(30, 25) and not e.contains(60, 25)
+    b = e.bounds()
+    assert b[0] <= -5 and b[3] >= 65                      # callout target included
+    assert e.leader_start() == pytest.approx((30.0, 33.75))   # bottom side faces the target
+    again = model.element_from_dict(e.to_dict())
+    assert again.to_dict() == e.to_dict() and again.kind == "text"
+    sheet = model.SheetData()
+    sheet.elements = [e]
+    assert model.SheetData.from_json(sheet.to_json()).texts()[0].text == "Hello\nworld"

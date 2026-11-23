@@ -406,7 +406,98 @@ class UnknownElement(object):
         return dict(self.data)
 
 
-ELEMENT_KINDS = {"image": ImageElement}
+class TextElement(object):
+    """A text box (format v2): top left corner and wrapping width in mm
+    (w = 0: one line per paragraph, no wrapping), height h computed by the
+    renderer from the text, font family, size (cap-to-descent height of a
+    line) in mm, bold, italic, colour, opacity, alignment, frame, white
+    background, layer. A callout has `leader` = [x, y] mm: an arrow from
+    the box to that point, which stays put when the box moves."""
+
+    kind = "text"
+    KEYS = ("kind", "id", "x", "y", "w", "h", "text", "font", "size", "bold", "italic",
+            "color", "opacity", "align", "frame", "background", "layer", "leader", "locked")
+
+    def __init__(self, id, text, x, y, w=60.0, h=0.0, font="Sans Serif", size=5.0,
+                 bold=False, italic=False, color="#1b1b1d", opacity=1.0, align="left",
+                 frame=False, background=False, layer="lines", leader=None, locked=False):
+        self.id = id
+        self.text = text
+        self.x, self.y, self.w, self.h = float(x), float(y), float(w), float(h)
+        self.font = font
+        self.size = float(size)
+        self.bold, self.italic = bool(bold), bool(italic)
+        self.color = color
+        self.opacity = float(opacity)
+        self.align = align
+        self.frame, self.background = bool(frame), bool(background)
+        self.layer = layer
+        self.leader = list(leader) if leader else None
+        self.locked = bool(locked)
+        self.extra = {}
+
+    @property
+    def pad(self):
+        """Margin between the text and its frame, mm."""
+        return self.size * 0.35 if (self.frame or self.background) else 0.0
+
+    def box(self):
+        p = self.pad
+        return self.x - p, self.y - p, self.x + self.w + p, self.y + self.h + p
+
+    def bounds(self):
+        x0, y0, x1, y1 = self.box()
+        if self.leader:
+            m = self.size
+            x0, y0 = min(x0, self.leader[0] - m), min(y0, self.leader[1] - m)
+            x1, y1 = max(x1, self.leader[0] + m), max(y1, self.leader[1] + m)
+        return x0, y0, x1, y1
+
+    def contains(self, px, py):
+        x0, y0, x1, y1 = self.box()
+        return x0 <= px <= x1 and y0 <= py <= y1
+
+    def leader_start(self):
+        """Point of the box border the callout arrow leaves from: the middle
+        of the side facing the target."""
+        x0, y0, x1, y1 = self.box()
+        tx, ty = self.leader
+        cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+        dx, dy = tx - cx, ty - cy
+        if abs(dx) * (y1 - y0) >= abs(dy) * (x1 - x0):
+            return (x1 if dx > 0 else x0), cy
+        return cx, (y1 if dy > 0 else y0)
+
+    def copy(self):
+        return TextElement.from_dict(self.to_dict())
+
+    def to_dict(self):
+        d = dict(self.extra)
+        d.update({"kind": "text", "id": self.id, "x": round(self.x, 3), "y": round(self.y, 3),
+                  "w": round(self.w, 3), "h": round(self.h, 3), "text": self.text,
+                  "font": self.font, "size": round(self.size, 3), "bold": self.bold,
+                  "italic": self.italic, "color": self.color, "opacity": round(self.opacity, 3),
+                  "align": self.align, "frame": self.frame, "background": self.background,
+                  "layer": self.layer, "locked": self.locked})
+        if self.leader:
+            d["leader"] = [round(v, 3) for v in self.leader]
+        return d
+
+    @classmethod
+    def from_dict(cls, d):
+        e = cls(d.get("id", ""), d.get("text", ""), d.get("x", 0), d.get("y", 0),
+                d.get("w", 60), d.get("h", 0), d.get("font", "Sans Serif"), d.get("size", 5),
+                d.get("bold", False), d.get("italic", False), d.get("color", "#1b1b1d"),
+                d.get("opacity", 1), d.get("align", "left"), d.get("frame", False),
+                d.get("background", False), d.get("layer", "lines"), d.get("leader"),
+                d.get("locked", False))
+        e.extra = dict((k, v) for k, v in d.items() if k not in cls.KEYS)
+        return e
+
+
+TEXT_ALIGNS = ["left", "center", "right"]
+
+ELEMENT_KINDS = {"image": ImageElement, "text": TextElement}
 
 
 def element_from_dict(d):
@@ -516,6 +607,9 @@ class SheetData(object):
 
     def images(self):
         return [e for e in self.elements if e.kind == "image"]
+
+    def texts(self):
+        return [e for e in self.elements if e.kind == "text"]
 
     def new_id(self, prefix="img"):
         used = set(getattr(e, "id", None) for e in self.elements)
