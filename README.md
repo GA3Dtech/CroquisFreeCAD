@@ -91,6 +91,19 @@ The side panel sets the paper and the visibility and opacity of each layer
 Closing the board (or *Update 3D*) writes the strokes into the document and
 regenerates the image plane, as one undo step in FreeCAD.
 
+## Tests
+
+```
+tests/run_all.sh            # lint, translations, unit, render, FreeCAD, vanilla, GUI
+tests/run_all.sh unit       # or render / freecad / vanilla / gui
+```
+
+Unit and rendering tests run on plain Python (pytest, PySide6, numpy); the
+other levels run inside a FreeCAD AppImage (`FREECAD_APPIMAGE`). The CI runs
+them all on FreeCAD 1.0.2 and 26.3rc2, including a check that every file
+written by Croquis opens in a FreeCAD **without the addon**, its image plane
+intact.
+
 ## API for agents (MCP)
 
 `freecad.croquis.api` is a stable, headless-safe API (millimetres,

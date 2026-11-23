@@ -21,11 +21,19 @@ by a linked `Image::ImagePlane`. Read `README.md` first; the full design
 | `freecad/croquis/canvas/view.py` | SheetCanvas (input devices, zoom, pan, shortcuts, painting) and SheetBoard (toolbar, tool options, paper / layers panel) |
 | `freecad/croquis/canvas/tools.py` | One object per tool: brushes, straight line, spline, erasers, vector edit |
 | `freecad/croquis/canvas/undo.py` | QUndoStack commands at stroke level |
+| `freecad/croquis/panel_model.py` | Single description of a panel (typed parameters, actions, sections) — pure Python |
+| `freecad/croquis/panels.py` | The workbench's panel models (New sheet, tool options…), calling `api.py` |
+| `freecad/croquis/bridge.py` | Generic engine: `Bridge` (QML), `WidgetForm` (widget fallback), `I18n`, theme; `LayersBridge` |
+| `freecad/croquis/qml_host.py` | Qt Quick availability (OpenGL, preference), `make_view`, `build_panel`, `PanelDialog` |
+| `freecad/croquis/resources/qml/` | Generic QML components (`Panel`, `Section`, one `*Row` per kind) and custom QML (`LayersPanel`) |
+| `freecad/croquis/qt.py` | Single PySide import point, Qt5 / Qt6 helpers |
 | `freecad/croquis/i18n.py` | `tr()` and language selection |
 | `freecad/croquis/prefs.py` | All settings (`get`/`put`) and the preference page |
 | `freecad/croquis/translations/` | `<code>.json` tables English → language |
 | `freecad/croquis/resources/palettes/` | Marker palettes (JSON) |
-| `tools/i18n.py` | Check / update the translation tables |
+| `tools/i18n.py` | Check / update the translation tables (Python and QML) |
+| `tests/` | Test suite, see *Testing*; `tests/fixtures/legacy/` frozen files (never regenerate) |
+| `.github/workflows/ci.yml` | CI: lint, unit, render, FreeCAD 1.0.2 / 26.3rc2 (integration, vanilla, GUI) |
 
 The repository lives directly in the user's FreeCAD `Mod` folder
 (`~/.local/share/FreeCAD/v26-3/Mod/CroquisFreeCAD`): changes are live after a
@@ -71,6 +79,30 @@ FreeCAD restart.
 - The canvas takes its keys (tool letters, Delete, Esc, Enter, Ctrl+Z...)
   through `ShortcutOverride`, otherwise FreeCAD's global shortcuts fire
   (Delete would delete document objects). Add new keys to `_OWN_KEYS`.
+- **Panels, rule 1: one model generates both interfaces.** A form panel
+  (options, parameters, lists, actions) is a `PanelModel` (`panels.py`);
+  the generic engine shows it in QML and builds the widget fallback
+  automatically. Never write the same panel twice (QML + widgets): when the
+  engine cannot show something, add a parameter kind to `panel_model.py`,
+  `bridge.WidgetForm` and a `*Row.qml`. No business logic in QML, widgets
+  or bridges: models call `api.py`.
+- **Panels, rule 2: custom QML only where it brings real value** (rich long
+  lists or grids, floating see-through items on the 3D view, palettes / HUD
+  around the drawing area), each justified in one line in its header, with a
+  simpler widget fallback keeping the function. Dialogs, confirmations and
+  very simple panels stay classic widgets or go through rule 1.
+  `tests/unit/test_panel_review.py` lists the allowed hand-made widget forms.
+- **The drawing canvas stays a QPainter widget** (`SheetCanvas`: tablet,
+  pressure, rendering speed); only the panels around it may be QML.
+- QML pitfalls: OpenGL graphics API set before the first `QQuickWidget`
+  (`qml_host.quick_usable`), else widget fallback; QtQuick imported from
+  PySide6 / PySide2 lazily (FreeCAD's PySide lacks it); versioned imports
+  (`QtQuick 2.15`, Qt 5 and Qt 6); the bridge's parent is the view; never
+  resize a view from a QML binding (0 ms timer); give rows their initial
+  properties (`Loader.setSource(url, props)`); QML texts use
+  `i18n.tr("...")` (scanned by `tools/i18n.py`), never `qsTr`; Loader /
+  Repeater items are not in the QObject tree (walk `childItems()`); a
+  focused QML field must keep its keys (tested).
 - Settings: always through `prefs.get()` / `prefs.put()` (keys in
   `prefs.DEFAULTS`), and expose new ones on the preference page.
 - Translations: after changing texts run `python3 tools/i18n.py update`, fill
@@ -79,16 +111,35 @@ FreeCAD restart.
 
 ## Testing
 
-No test suite. `model.py` and `render/stroke_geom.py` import without FreeCAD.
-Rendering can be checked headless with the FreeCAD AppImage:
-`QT_QPA_PLATFORM=offscreen ~/Appimages/FreeCAD_26.3rc1-Linux-x86_64.AppImage freecadcmd script.py`
-(create a `QGuiApplication` first). Document objects can be tested in
-`freecadcmd` too; the board window and tablet input must be checked in
-FreeCAD by the user — say so explicitly when it has not been tested.
+**Every change of logic comes with a test; unit, rendering and FreeCAD
+tests must be green before a commit.** GUI behaviour with a real tablet and
+the feel of drawing can only be checked by hand: say so explicitly.
+
+| Level | Where | Run |
+|---|---|---|
+| unit | `tests/unit` (pure Python, no Qt / FreeCAD) | `.venv/bin/python -m pytest tests/unit` |
+| render | `tests/render` (Qt offscreen, reference images in `tests/expected/render`) | `.venv/bin/python -m pytest tests/render` (`--update-golden` to rewrite on purpose) |
+| freecad | `tests/freecad` (inside `freecadcmd`) | `tests/run_all.sh freecad` |
+| vanilla | `tests/vanilla` (FreeCAD **without** the addon) | `tests/run_all.sh vanilla` (after `freecad`, same `CROQUIS_WORK`) |
+| gui | `tests/gui` + GUI part of `tests/vanilla` (FreeCAD GUI, offscreen locally, xvfb in CI) | `tests/run_all.sh gui` |
+| all | lint, translations and every level | `tests/run_all.sh` |
+
+- `.venv`: `uv venv .venv && uv pip install --python .venv/bin/python pytest ruff PySide6 numpy`.
+- `tests/run_all.sh` uses `FREECAD_APPIMAGE` (default the user's 26.3 RC1
+  AppImage; an extracted `AppRun` works too), an isolated
+  `FREECAD_USER_HOME` with the repository linked in its `Mod` folder, and
+  installs pytest for FreeCAD's Python. `tests/run_in_freecad.py` runs pytest
+  inside FreeCAD and always ends with `os._exit` (freecadcmd may return 0 on
+  failure); `tests/check_junit.py` checks the reports.
+- Fixtures: `tests/fixtures/specs.py` (deterministic sheets) and
+  `build_fixtures.py`. Format changes go through `model.FORMAT_VERSION` + a
+  tested migration in `model.MIGRATIONS`; legacy files must keep opening.
+- Never test on the user's open documents: work on copies in a temporary
+  folder (also through the FreeCAD MCP server) and close them.
 
 ## Releases and git
 
 - Bump `version` and `date` in `package.xml` for a release, update the status
   table of `README.md` when features change.
 - `__pycache__/` is ignored; never commit it.
-- Commit in small steps with English messages.
+- Commit in small steps with English messages; each commit green.
