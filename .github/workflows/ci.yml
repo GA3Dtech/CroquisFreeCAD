@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Croquis CI: lint, unit and rendering tests on plain Python, then the
+# FreeCAD integration, vanilla (no addon) and GUI smoke tests inside real
+# FreeCAD builds.
+#
+# FreeCAD versions are pinned. 1.0.2 is the last 1.0.x (Qt 5, Python 3.11).
+# No stable 26.x is published yet: 26.3rc2 (Qt 6) is the most recent 26.x
+# build; move to 26.3 when it is released.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  RUFF_VERSION: "0.17.6"
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "ruff==${RUFF_VERSION}"
+      - run: ruff check freecad tools tests
+      - run: python3 tools/i18n.py check
+
+  unit:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install pytest
+      - run: python -m pytest -q tests/unit --junitxml=junit-unit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-${{ matrix.python }}
+          path: junit-unit.xml
+
+  render:
+    runs-on: ubuntu-24.04
+    env:
+      QT_QPA_PLATFORM: offscreen
+      CROQUIS_ARTIFACTS: ${{ github.workspace }}/artifacts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - run: pip install pytest PySide6 numpy
+      - run: python -m pytest -q tests/render --junitxml=junit-render.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render
+          path: |
+            junit-render.xml
+            artifacts/
+
+  freecad:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - freecad: "1.0.2"
+          - freecad: "26.3rc2"
+    env:
+      CROQUIS_WORK: ${{ github.workspace }}/work
+      FREECAD_QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libglu1-mesa
+      - id: freecad
+        name: Get FreeCAD ${{ matrix.freecad }}
+        uses: ./.github/actions/freecad
+        with:
+          version: ${{ matrix.freecad }}
+          token: ${{ github.token }}
+      - name: Rendering and integration tests inside FreeCAD
+        env:
+          FREECAD_APPIMAGE: ${{ steps.freecad.outputs.apprun }}
+        run: tests/run_all.sh freecad
+      - name: Vanilla tests (FreeCAD without the addon)
+        if: always()
+        env:
+          FREECAD_APPIMAGE: ${{ steps.freecad.outputs.apprun }}
+        run: tests/run_all.sh vanilla
+      - name: Check the JUnit reports
+        if: always()
+        run: python3 tests/check_junit.py "$CROQUIS_WORK"/junit-*.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: freecad-${{ matrix.freecad }}
+          path: work/
+
+  gui:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - freecad: "1.0.2"
+          - freecad: "26.3rc2"
+    env:
+      CROQUIS_WORK: ${{ github.workspace }}/work
+      FREECAD_QT_QPA_PLATFORM: xcb
+      LIBGL_ALWAYS_SOFTWARE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install X server and Mesa
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 libgl1 libglu1-mesa \
+            libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libfontconfig1 libdbus-1-3
+      - id: freecad
+        name: Get FreeCAD ${{ matrix.freecad }}
+        uses: ./.github/actions/freecad
+        with:
+          version: ${{ matrix.freecad }}
+          token: ${{ github.token }}
+      - name: GUI smoke tests under xvfb
+        env:
+          FREECAD_APPIMAGE: ${{ steps.freecad.outputs.apprun }}
+        run: xvfb-run -a -s "-screen 0 1600x1000x24" tests/run_all.sh gui
+      - name: Check the JUnit reports
+        if: always()
+        run: python3 tests/check_junit.py "$CROQUIS_WORK"/junit-*.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-${{ matrix.freecad }}
+          path: work/

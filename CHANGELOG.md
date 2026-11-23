@@ -23,6 +23,10 @@ All notable changes to this project are documented here. The format follows
 - Unknown fields, layers and tools written by a newer version of the addon
   are kept (and written back) instead of being dropped or drawn as pencil.
 
+- GitHub Actions CI: lint, unit tests (Python 3.10 / 3.12), rendering
+  tests, then FreeCAD 1.0.2 and 26.3rc2 (pinned official AppImages,
+  extracted, cached): integration, vanilla and GUI smoke tests, JUnit
+  checks and artifacts.
 - Public API `freecad.croquis.api` (sheets, strokes, layers, paper,
   PNG rendering, `describe()`) with typed errors (`errors.py`), documented
   in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.

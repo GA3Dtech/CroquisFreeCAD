@@ -180,6 +180,13 @@ def test_render_and_export(doc, sheet, tmp_path):
         api.export_png(n, "", doc=doc)
 
 
+def test_api_file_for_vanilla(doc, sheet, output_dir):
+    """A file built only through the API, reopened by the vanilla tests."""
+    api.add_strokes(sheet["name"], ALL_TOOLS, doc=doc)
+    api.set_layer(sheet["name"], "marker", opacity=0.6, doc=doc)
+    doc.saveAs(os.path.join(output_dir, "api_sheet.FCStd"))
+
+
 def test_active_document_default(doc, sheet):
     App.setActiveDocument(doc.Name)
     assert api.list_sheets()[0]["name"] == sheet["name"]

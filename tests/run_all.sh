@@ -4,8 +4,12 @@
 #
 #   tests/run_all.sh [unit|render|freecad|vanilla|gui|all]
 #
-# FREECAD_APPIMAGE   FreeCAD AppImage to use
+# FREECAD_APPIMAGE   FreeCAD AppImage to use, or the AppRun of an extracted
+#                    AppImage (CI: no FUSE on the runners)
 #                    (default ~/Appimages/FreeCAD_26.3rc1-Linux-x86_64.AppImage)
+# CROQUIS_WORK       work folder (default: a new temporary folder); keep the
+#                    same one for "freecad" then "vanilla" so the vanilla
+#                    tests also open the files written by the FreeCAD tests
 # PYTHON             Python with pytest, ruff, PySide6, numpy for the levels
 #                    run outside FreeCAD (default .venv/bin/python, else python3)
 set -euo pipefail
@@ -27,19 +31,24 @@ run_host() {   # level marker
 
 fc_python_version() {
     printf 'import sys\nopen(sys.argv[-1], "w").write("%%d.%%d" %% sys.version_info[:2])\n' > "$WORK/pyver.py"
-    "$APPIMAGE" freecadcmd "$WORK/pyver.py" --pass "$WORK/pyver.txt" >/dev/null 2>&1 || true
+    FREECAD_USER_HOME="$WORK/home-pyver" \
+        "$APPIMAGE" freecadcmd "$WORK/pyver.py" --pass "$WORK/pyver.txt" >/dev/null 2>&1 || true
     cat "$WORK/pyver.txt"
 }
 
 prepare_freecad() {
     local ver
     ver="$(fc_python_version)"
+    echo "FreeCAD Python: $ver"
     export CROQUIS_PYTEST_SITE="$WORK/site-$ver"
     if [ ! -d "$CROQUIS_PYTEST_SITE/pytest" ]; then
+        # pytest is pure Python: any pip can install it for FreeCAD's Python
         if command -v uv >/dev/null; then
             uv pip install -q --target "$CROQUIS_PYTEST_SITE" --python-version "$ver" pytest
-        else
+        elif "$PYTHON" -m pip --version >/dev/null 2>&1; then
             "$PYTHON" -m pip install -q --target "$CROQUIS_PYTEST_SITE" pytest
+        else
+            python3 -m pip install -q --target "$CROQUIS_PYTEST_SITE" pytest
         fi
     fi
 }

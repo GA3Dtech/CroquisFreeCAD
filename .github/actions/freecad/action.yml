@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Download (with cache) and extract the official Linux AppImage of a pinned
+# FreeCAD release. The runners have no FUSE: the AppImage is extracted and
+# its AppRun is used instead (`AppRun freecadcmd script.py` works like the
+# AppImage itself).
+name: FreeCAD AppImage
+description: Pinned FreeCAD AppImage, extracted
+inputs:
+  version:
+    description: release tag of FreeCAD/FreeCAD (exact, e.g. 1.0.2)
+    required: true
+  token:
+    description: token for the GitHub API (rate limit)
+    required: true
+outputs:
+  apprun:
+    description: path of the extracted AppRun
+    value: ${{ steps.extract.outputs.apprun }}
+runs:
+  using: composite
+  steps:
+    - id: asset
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+      run: |
+        url=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+          "https://api.github.com/repos/FreeCAD/FreeCAD/releases/tags/${{ inputs.version }}" \
+          | python3 -c 'import json, re, sys
+        r = json.load(sys.stdin)
+        a = [x["browser_download_url"] for x in r["assets"]
+             if re.search(r"Linux-x86_64.*\.AppImage$", x["name"])]
+        print(a[0])')
+        echo "url=$url" >> "$GITHUB_OUTPUT"
+        echo "name=$(basename "$url")" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/freecad-appimage
+        key: freecad-${{ steps.asset.outputs.name }}
+    - id: extract
+      shell: bash
+      run: |
+        dir="${{ runner.temp }}/freecad-appimage"
+        mkdir -p "$dir"
+        if [ ! -f "$dir/${{ steps.asset.outputs.name }}" ]; then
+          curl -fsSL -o "$dir/${{ steps.asset.outputs.name }}" "${{ steps.asset.outputs.url }}"
+        fi
+        chmod +x "$dir/${{ steps.asset.outputs.name }}"
+        cd "${{ runner.temp }}"
+        "$dir/${{ steps.asset.outputs.name }}" --appimage-extract >/dev/null
+        echo "apprun=${{ runner.temp }}/squashfs-root/AppRun" >> "$GITHUB_OUTPUT"
+        "${{ runner.temp }}/squashfs-root/AppRun" freecadcmd --version || true
