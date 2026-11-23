@@ -256,6 +256,9 @@ def test_text_element():
     b = e.bounds()
     assert b[0] <= -5 and b[3] >= 65                      # callout target included
     assert e.leader_start() == pytest.approx((30.0, 33.75))   # bottom side faces the target
+    nowrap = model.TextElement("t2", "x", 0, 0, w=0)
+    nowrap.aw, nowrap.h = 25, 5
+    assert nowrap.width == 25 and nowrap.box()[2] == 25
     again = model.element_from_dict(e.to_dict())
     assert again.to_dict() == e.to_dict() and again.kind == "text"
     sheet = model.SheetData()

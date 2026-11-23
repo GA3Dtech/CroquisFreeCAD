@@ -646,7 +646,7 @@ class EditTool(Tool):
             e.x, e.y = orig.x + x - x0, orig.y + y - y0
         elif mode == "wrap":
             from ..render import text as text_mod
-            e.w = max(5.0, x - e.x)
+            e.w = max(5.0, x - e.x)         # dragging the width handle starts wrapping
             text_mod.fit(e)
         elif mode == "leader":
             e.leader = [x, y]

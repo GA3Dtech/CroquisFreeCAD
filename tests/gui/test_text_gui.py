@@ -75,7 +75,7 @@ def test_double_click_edits_and_panel(board):
     e = b.sheet.texts()[0]
     assert e.size == 8 and e.bold
     c.set_tool("edit")
-    centre = c.to_widget((e.x + e.w / 2, e.y + e.h / 2))
+    centre = c.to_widget((e.x + e.width / 2, e.y + e.h / 2))
     ev = __import__("PySide").QtGui.QMouseEvent(
         QtCore.QEvent.MouseButtonDblClick, centre, centre, QtCore.Qt.LeftButton,
         QtCore.Qt.LeftButton, QtCore.Qt.NoModifier)
@@ -100,7 +100,7 @@ def test_callout_tip_stays_when_box_moves(board):
     e = b.sheet.texts()[0]
     tip = list(e.leader)
     c.set_tool("edit")
-    centre = c.to_widget((e.x + e.w / 2, e.y + e.h / 2))
+    centre = c.to_widget((e.x + e.width / 2, e.y + e.h / 2))
     drag(c, [(centre.x(), centre.y()), (centre.x() + 50, centre.y() + 30)])
     moved = b.sheet.texts()[0]
     assert moved.x > e.x and moved.leader == tip

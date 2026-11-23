@@ -415,7 +415,7 @@ class TextElement(object):
     the box to that point, which stays put when the box moves."""
 
     kind = "text"
-    KEYS = ("kind", "id", "x", "y", "w", "h", "text", "font", "size", "bold", "italic",
+    KEYS = ("kind", "id", "x", "y", "w", "h", "aw", "text", "font", "size", "bold", "italic",
             "color", "opacity", "align", "frame", "background", "layer", "leader", "locked")
 
     def __init__(self, id, text, x, y, w=60.0, h=0.0, font="Sans Serif", size=5.0,
@@ -434,7 +434,13 @@ class TextElement(object):
         self.layer = layer
         self.leader = list(leader) if leader else None
         self.locked = bool(locked)
+        self.aw = 0.0       # natural width (computed) of a box that does not wrap
         self.extra = {}
+
+    @property
+    def width(self):
+        """Width of the box: the wrap width, or the natural width."""
+        return self.w if self.w > 0 else self.aw
 
     @property
     def pad(self):
@@ -443,7 +449,7 @@ class TextElement(object):
 
     def box(self):
         p = self.pad
-        return self.x - p, self.y - p, self.x + self.w + p, self.y + self.h + p
+        return self.x - p, self.y - p, self.x + self.width + p, self.y + self.h + p
 
     def bounds(self):
         x0, y0, x1, y1 = self.box()
@@ -474,7 +480,8 @@ class TextElement(object):
     def to_dict(self):
         d = dict(self.extra)
         d.update({"kind": "text", "id": self.id, "x": round(self.x, 3), "y": round(self.y, 3),
-                  "w": round(self.w, 3), "h": round(self.h, 3), "text": self.text,
+                  "w": round(self.w, 3), "h": round(self.h, 3), "aw": round(self.aw, 3),
+                  "text": self.text,
                   "font": self.font, "size": round(self.size, 3), "bold": self.bold,
                   "italic": self.italic, "color": self.color, "opacity": round(self.opacity, 3),
                   "align": self.align, "frame": self.frame, "background": self.background,
@@ -491,6 +498,7 @@ class TextElement(object):
                 d.get("opacity", 1), d.get("align", "left"), d.get("frame", False),
                 d.get("background", False), d.get("layer", "lines"), d.get("leader"),
                 d.get("locked", False))
+        e.aw = float(d.get("aw", 0.0))
         e.extra = dict((k, v) for k, v in d.items() if k not in cls.KEYS)
         return e
 

@@ -58,10 +58,10 @@ def measure(e):
 
 
 def fit(e):
-    """Update e.h (and e.w when not wrapping) from the text."""
+    """Update e.h, and the natural width e.aw of a box that does not wrap
+    (with a little room for italic overhangs)."""
     w, h = measure(e)
-    if e.w <= 0:
-        e.w = w
+    e.aw = w + e.size * 0.15 if e.w <= 0 else 0.0
     e.h = h
     return e
 

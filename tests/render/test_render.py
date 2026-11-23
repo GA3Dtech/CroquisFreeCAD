@@ -203,16 +203,17 @@ def test_text_box_rendered_in_its_box():
     e = model.TextElement("t", "Croquis", 20, 15, w=0, size=8, color="#000000",
                           leader=[100, 50])
     text.fit(e)
-    assert e.h == pytest.approx(8, rel=0.5) and e.w > 20
+    assert e.h == pytest.approx(8, rel=0.5) and e.w == 0 and e.aw > 20
     sheet.elements = [e]
     arr = render(sheet)
     ys, xs = np.nonzero(arr[:, :, 3] > 128)
     s = sheet.scale
-    glyphs = (xs < (e.x + e.w + 1) * s) & (ys < (e.y + e.h + 1) * s)
+    glyphs = (xs < (e.x + e.width + 1) * s) & (ys < (e.y + e.h + 1) * s)
     assert glyphs.sum() > 100
     gx, gy = xs[glyphs], ys[glyphs]
     assert gx.min() >= (e.x - 1) * s and gy.min() >= (e.y - 1) * s
-    assert (gy.max() - gy.min()) / s <= e.h + 1             # glyph height within the line
+    assert (gy.max() - gy.min()) / s <= e.h + 1             # one line: no wrapping
+    assert gx.max() <= (e.x + e.width) * s + 2
     X, Y = px(sheet, 99, 49)
     assert arr[Y - 3:Y + 4, X - 3:X + 4, 3].max() > 0       # the callout reaches its target
 
