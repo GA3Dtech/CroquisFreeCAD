@@ -54,7 +54,7 @@ prepare_freecad() {
 }
 
 run_fc() {   # binary(freecadcmd|FreeCAD) level [vanilla]
-    local bin="$1" level="$2" home="$WORK/home-$2"
+    local bin="$1" level="$2" report="$2-$1" home="$WORK/home-$2-$1"
     echo "== $level (FreeCAD: $(basename "$APPIMAGE") $bin)"
     rm -rf "$home"; mkdir -p "$home/Mod"
     if [ "${3:-}" != vanilla ]; then
@@ -64,7 +64,7 @@ run_fc() {   # binary(freecadcmd|FreeCAD) level [vanilla]
         export CROQUIS_VANILLA=1
     fi
     FREECAD_USER_HOME="$home" FREECAD_QT_QPA_PLATFORM="${FREECAD_QT_QPA_PLATFORM:-offscreen}" \
-    CROQUIS_JUNIT="$WORK/junit-$level.xml" \
+    CROQUIS_JUNIT="$WORK/junit-$report.xml" \
         "$APPIMAGE" "$bin" "$ROOT/tests/run_in_freecad.py" --pass -q "$ROOT/tests/$level" \
         || status=1
     unset CROQUIS_VANILLA
@@ -74,7 +74,7 @@ case "$LEVEL" in
     unit|render) run_host "$LEVEL" ;;
     freecad) prepare_freecad; run_fc freecadcmd render; run_fc freecadcmd freecad ;;
     vanilla) prepare_freecad; run_fc freecadcmd vanilla vanilla ;;
-    gui) prepare_freecad; run_fc FreeCAD gui ;;
+    gui) prepare_freecad; run_fc FreeCAD gui; run_fc FreeCAD vanilla vanilla ;;
     all)
         (cd "$ROOT" && "$PYTHON" -m ruff check freecad tools tests) || status=1
         python3 "$ROOT/tools/i18n.py" check >/dev/null || status=1
@@ -82,7 +82,7 @@ case "$LEVEL" in
         prepare_freecad
         run_fc freecadcmd render; run_fc freecadcmd freecad
         run_fc freecadcmd vanilla vanilla
-        run_fc FreeCAD gui
+        run_fc FreeCAD gui; run_fc FreeCAD vanilla vanilla
         ;;
     *) echo "unknown level $LEVEL"; exit 2 ;;
 esac

@@ -34,6 +34,9 @@ def main():
         root = os.path.dirname(HERE)
         sys.path[:] = [p for p in sys.path if os.path.abspath(p or ".") != root]
         os.chdir(os.environ.get("TMPDIR", "/tmp"))
+    # In the GUI, sys.stdout goes to the report view: print to the console
+    if sys.__stdout__ is not None:
+        sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__
     import pytest
     junit = os.environ.get("CROQUIS_JUNIT")
     if junit:

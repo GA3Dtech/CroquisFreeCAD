@@ -27,6 +27,10 @@ All notable changes to this project are documented here. The format follows
   tests, then FreeCAD 1.0.2 and 26.3rc2 (pinned official AppImages,
   extracted, cached): integration, vanilla and GUI smoke tests, JUnit
   checks and artifacts.
+- GUI smoke tests (workbench, commands, board tools through synthetic
+  events, undo keys, keyboard guards) and GUI vanilla tests (image plane
+  displayed and visible in a 3D view capture without the addon).
+- Ctrl+C on the board copies the rendered sheet to the clipboard.
 - Public API `freecad.croquis.api` (sheets, strokes, layers, paper,
   PNG rendering, `describe()`) with typed errors (`errors.py`), documented
   in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.
@@ -35,6 +39,10 @@ All notable changes to this project are documented here. The format follows
 - The version is read from `package.xml` only.
 - The "New sketch sheet" and "Export sheet as PNG" commands go through
   the public API.
+
+### Fixed
+- Ctrl+C / Ctrl+V on the drawing board no longer reach FreeCAD's copy /
+  paste of document objects.
 
 ## [0.2.0] - 2026-11-22
 

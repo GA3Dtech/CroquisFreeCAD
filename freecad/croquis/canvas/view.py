@@ -57,9 +57,10 @@ BOARD_TOOLS = [
 _TOOL_KEYS = dict((int(k), t) for t, _i, k in BOARD_TOOLS)
 
 # Keys handled by the canvas even if FreeCAD has a shortcut on them
-# (Delete would delete the selected document objects, Ctrl+Z undo in 3D)
+# (Delete would delete the selected document objects, Ctrl+Z undo in 3D,
+# Ctrl+C / Ctrl+V copy and paste document objects)
 _OWN_KEYS = set(_TOOL_KEYS) | set(int(k) for k in (
-    QtCore.Qt.Key_F, QtCore.Qt.Key_Space,
+    QtCore.Qt.Key_F, QtCore.Qt.Key_Space, QtCore.Qt.Key_C,
     QtCore.Qt.Key_BracketLeft, QtCore.Qt.Key_BracketRight,
     QtCore.Qt.Key_Z, QtCore.Qt.Key_Y, QtCore.Qt.Key_Delete, QtCore.Qt.Key_Backspace,
     QtCore.Qt.Key_Escape, QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter))
@@ -320,6 +321,11 @@ class SheetCanvas(QtWidgets.QWidget):
     def cancel_stroke(self):
         self.handler.cancel()
 
+    def copy_render(self):
+        """Copy the rendered sheet to the clipboard (paste it into a mail,
+        a report...)."""
+        QtWidgets.QApplication.clipboard().setImage(self.compositor.image.copy())
+
     def pick_stroke(self, pos, kinds=None):
         """Topmost visible stroke under the widget position (or None)."""
         x, y = self.to_mm(pos)
@@ -531,6 +537,8 @@ class SheetCanvas(QtWidgets.QWidget):
         elif k == int(QtCore.Qt.Key_Y) and ctrl:
             self.handler.cancel()
             self.undo_stack.redo()
+        elif k == int(QtCore.Qt.Key_C) and ctrl:
+            self.copy_render()
         elif ctrl:
             QtWidgets.QWidget.keyPressEvent(self, event)
         elif self.handler.key(k, mods):
