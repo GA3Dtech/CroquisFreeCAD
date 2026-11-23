@@ -91,62 +91,14 @@ def _one_sheet():
 # ----------------------------------------------------------------------
 #  New sheet
 # ----------------------------------------------------------------------
-class NewSheetDialog(object):
-    """Format, resolution, paper and plane of a new sheet (defaults from
-    the preferences, remembered for next time)."""
-
-    def __init__(self):
-        from . import prefs
-        from .qt import QtWidgets
-        self.dialog = d = QtWidgets.QDialog(Gui.getMainWindow())
-        d.setWindowTitle(tr("New sketch sheet"))
-        form = QtWidgets.QFormLayout(d)
-        self.name = QtWidgets.QLineEdit(tr("Sketch"))
-        form.addRow(tr("Name:"), self.name)
-        self.fmt = QtWidgets.QComboBox()
-        self.dpi = QtWidgets.QComboBox()
-        self.paper = QtWidgets.QComboBox()
-        self.plane = QtWidgets.QComboBox()
-        prefs.fill_sheet_combos(self.fmt, self.dpi, self.paper, self.plane)
-        prefs.select_data(self.fmt, prefs.get("SheetFormat"))
-        prefs.select_data(self.dpi, prefs.get("SheetDpi"))
-        prefs.select_data(self.paper, prefs.get("SheetPaper"))
-        prefs.select_data(self.plane, prefs.get("SheetPlane"))
-        form.addRow(tr("Format:"), self.fmt)
-        form.addRow(tr("Resolution:"), self.dpi)
-        form.addRow(tr("Paper:"), self.paper)
-        form.addRow(tr("Image plane:"), self.plane)
-        buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel)
-        buttons.accepted.connect(d.accept)
-        buttons.rejected.connect(d.reject)
-        form.addRow(buttons)
-
-    def run(self):
-        """dict of the choices, or None when cancelled."""
-        from . import prefs
-        run = getattr(self.dialog, "exec", None) or self.dialog.exec_
-        if not run():
-            return None
-        res = {"label": self.name.text().strip() or tr("Sketch"),
-               "fmt": self.fmt.currentData(), "dpi": self.dpi.currentData(),
-               "paper": self.paper.currentData(), "plane": self.plane.currentData()}
-        prefs.put("SheetFormat", res["fmt"])
-        prefs.put("SheetDpi", res["dpi"])
-        prefs.put("SheetPaper", res["paper"])
-        prefs.put("SheetPlane", res["plane"])
-        return res
-
-
 def new_sheet():
-    from . import api, sheet
-    choice = NewSheetDialog().run()
-    if choice is None:
-        return
+    """The New sheet panel (generic panel model, QML or widgets)."""
+    from . import panels, qml_host, sheet
     doc = App.ActiveDocument
-    info = api.create_sheet(doc, choice["fmt"], choice["dpi"], choice["paper"],
-                            choice["plane"], label=choice["label"])
-    obj = doc.getObject(info["name"])
+    m = panels.new_sheet_model(doc)
+    if not qml_host.run_dialog(m) or m.created is None:
+        return
+    obj = doc.getObject(m.created["name"])
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(obj)
     sheet.open_board(obj)

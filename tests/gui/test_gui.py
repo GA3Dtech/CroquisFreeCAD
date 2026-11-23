@@ -9,7 +9,7 @@ import FreeCADGui as Gui
 import pytest
 from conftest import process, qt
 
-from freecad.croquis import api, commands, model, sheet
+from freecad.croquis import api, model, qml_host, sheet
 
 pytestmark = pytest.mark.gui
 
@@ -22,10 +22,14 @@ def board_of(obj):
 
 
 def new_sheet(doc, monkeypatch, **choice):
-    c = {"label": "Gui", "fmt": "A5L", "dpi": 72, "paper": "white", "plane": "XZ"}
+    c = {"label": "Gui", "format": "A5L", "dpi": "72", "paper": "white", "plane": "XZ"}
     c.update(choice)
-    monkeypatch.setattr(commands.NewSheetDialog, "__init__", lambda self: None)
-    monkeypatch.setattr(commands.NewSheetDialog, "run", lambda self: c)
+
+    def fake_dialog(m, doc=None, parent=None):     # the user fills the panel, OK
+        for name, value in c.items():
+            assert m.set(name, value), m.error
+        return m.accept()
+    monkeypatch.setattr(qml_host, "run_dialog", fake_dialog)
     App.setActiveDocument(doc.Name)
     Gui.runCommand("Croquis_NewSheet")
     process()
