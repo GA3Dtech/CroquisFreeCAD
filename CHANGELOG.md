@@ -31,6 +31,11 @@ All notable changes to this project are documented here. The format follows
   events, undo keys, keyboard guards) and GUI vanilla tests (image plane
   displayed and visible in a 3D view capture without the addon).
 - Ctrl+C on the board copies the rendered sheet to the clipboard.
+- Panels built from a single model (`panel_model.py`) shown in QML with an
+  automatic widget fallback (`bridge.py`, `qml_host.py`,
+  `resources/qml/`); preference "Use QML panels". The New sheet dialog and
+  the board's tool options use it.
+- Custom QML paper / layers palette on the board (widget fallback kept).
 - Public API `freecad.croquis.api` (sheets, strokes, layers, paper,
   PNG rendering, `describe()`) with typed errors (`errors.py`), documented
   in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.

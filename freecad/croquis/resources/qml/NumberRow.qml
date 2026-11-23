@@ -29,7 +29,7 @@ Item {
         id: field
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.round(96 * th.s); height: Math.round(24 * th.s)
+        width: Math.round(76 * th.s); height: Math.round(24 * th.s)
         radius: Math.round(4 * th.s)
         color: th.field
         border.width: input.activeFocus ? 1 : 0

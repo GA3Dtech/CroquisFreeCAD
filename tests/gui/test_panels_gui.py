@@ -11,8 +11,8 @@ import FreeCADGui as Gui
 import pytest
 from conftest import process, qt
 
-from freecad.croquis import panels, qml_host, sheet
-from freecad.croquis.bridge import Bridge, I18n, WidgetForm
+from freecad.croquis import model, panels, qml_host, sheet
+from freecad.croquis.bridge import Bridge, I18n, LayersBridge, WidgetForm
 from freecad.croquis.panel_model import Action, PanelModel, Param
 
 pytestmark = pytest.mark.gui
@@ -68,6 +68,8 @@ def test_qml_file_loads(path, quick, messages):
     bridge = Bridge(every_kind_model())
     engine.rootContext().setContextProperty("bridge", bridge)
     engine.rootContext().setContextProperty("i18n", I18n(bridge))
+    layers = LayersBridge(FakeLayersCanvas(), parent=bridge)     # kept alive by its parent
+    engine.rootContext().setContextProperty("layers", layers)
     comp = qml.QQmlComponent(engine, QtCore.QUrl.fromLocalFile(path))
     assert comp.status() == qml.QQmlComponent.Ready, \
         "\n".join(e.toString() for e in comp.errors())
@@ -77,6 +79,44 @@ def test_qml_file_loads(path, quick, messages):
     bad = [m for m in messages if "qml" in m.lower() or "TypeError" in m or "ReferenceError" in m]
     assert bad == []
     obj.deleteLater()
+
+
+class FakeLayersCanvas(object):
+    def __init__(self):
+        self.sheet = model.SheetData()
+
+    def set_paper(self, key):
+        self.sheet.paper = key
+
+    def set_layer(self, key, visible=None, opacity=None):
+        if visible is not None:
+            self.sheet.layers[key]["visible"] = visible
+        if opacity is not None:
+            self.sheet.layers[key]["opacity"] = opacity
+
+
+def test_layers_panel_qml_and_fallback(doc, monkeypatch):
+    obj = sheet.create_sheet(doc, "A5L", 72, "white", "XZ", "L")
+    b = sheet.open_board(obj)
+    process()
+    if qml_host.quick_usable():
+        assert b.layers_kind == "qml"
+        root = b.layers.rootObject()
+        for key in model.ERASABLE_LAYERS:
+            assert find_item(root, "layer_" + key) is not None
+        for key, _l, _c in model.PAPERS:
+            assert find_item(root, "paper_" + key) is not None
+        b.layers_bridge.setPaper("kraft")
+        b.layers_bridge.setOpacity("marker", 0.25)
+        b.layers_bridge.setVisible("lines", False)
+        assert b.sheet.paper == "kraft" and b.sheet.layers["marker"]["opacity"] == 0.25
+        assert b.sheet.layers["lines"]["visible"] is False and b.is_modified()
+    sheet.close_board(obj)
+    assert obj.Paper == ("kraft" if qml_host.quick_usable() else "white")
+    monkeypatch.setattr(qml_host, "FORCE_WIDGETS", True)
+    b = sheet.open_board(obj)
+    assert b.layers_kind == "widgets"
+    assert b.layers.paper.count() == len(model.PAPERS)
 
 
 def panel_models(doc, board):
@@ -115,6 +155,10 @@ def test_qml_and_widgets_same_content(doc, board, monkeypatch):
 
 def test_board_options_panel_follows_tool(board):
     b = board
+    for tool in ("pencil", "marker", "line", "spline", "eraser", "edit"):
+        b.canvas.set_tool(tool)
+        b.options_bridge.values      # every getter, hidden parameters included
+        assert b.options_bridge.error == "", (tool, b.options_bridge.error)
     hidden = set(b.options_bridge.hidden)
     assert "spline_mode" in hidden
     b.canvas.set_tool("spline")

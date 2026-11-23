@@ -105,7 +105,8 @@ def tool_options_model(canvas):
                 lambda value: c.set_option(name, value))
 
     def profile(name):
-        return (lambda: int(round(c.current()[name] * 100)),
+        # current() of a raster tool has no profile: show the default
+        return (lambda: int(round(c.current().get(name, model.DEFAULT_PROFILE[name]) * 100)),
                 lambda value: c.set_profile(name, value / 100.0))
 
     def hint():

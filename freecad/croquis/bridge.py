@@ -309,3 +309,59 @@ class WidgetForm(QtWidgets.QWidget):
         self.hint.setVisible(bool(self.bridge.hint))
         self.err.setText(self.bridge.error)
         self.err.setVisible(bool(self.bridge.error))
+
+
+# ----------------------------------------------------------------------
+#  Paper / layers palette (custom QML, rule 2)
+# ----------------------------------------------------------------------
+class LayersBridge(QtCore.QObject):
+    """State of resources/qml/LayersPanel.qml: papers, the current paper,
+    the drawable layers (top first) with visibility and opacity. Changes go
+    to the canvas (set_paper / set_layer); no logic here."""
+
+    changed = QtCore.Signal()
+
+    def __init__(self, canvas, parent=None, theme=None):
+        QtCore.QObject.__init__(self, parent)
+        from . import model
+        self.canvas = canvas
+        self._theme = theme or make_theme()
+        self._papers = [{"key": k, "label": tr_data(label), "color": color or ""}
+                        for k, label, color in model.PAPERS]
+        users = {}
+        for key in model.TOOL_KEYS:
+            t = model.TOOLS[key]
+            if t["kind"] != "eraser":
+                users.setdefault(t["layer"], []).append(tr_data(t["label"]))
+        self._layer_defs = [(k, tr_data(label), ", ".join(users.get(k, [])))
+                            for k, label, _b in reversed(model.LAYERS)
+                            if k in model.ERASABLE_LAYERS]
+        signal = getattr(canvas, "sheetEdited", None)
+        if signal is not None:
+            signal.connect(self.changed)
+
+    def _layers(self):
+        info = self.canvas.sheet.layers
+        return [{"key": k, "label": label, "tools": tools,
+                 "visible": bool(info[k]["visible"]), "opacity": float(info[k]["opacity"])}
+                for k, label, tools in self._layer_defs]
+
+    theme = QtCore.Property("QVariant", lambda self: self._theme, constant=True)
+    papers = QtCore.Property("QVariant", lambda self: self._papers, constant=True)
+    paper = QtCore.Property(str, lambda self: self.canvas.sheet.paper, notify=changed)
+    layers = QtCore.Property("QVariant", _layers, notify=changed)
+
+    @QtCore.Slot(str)
+    def setPaper(self, key):
+        self.canvas.set_paper(key)
+        self.changed.emit()
+
+    @QtCore.Slot(str, bool)
+    def setVisible(self, key, visible):
+        self.canvas.set_layer(key, visible=visible)
+        self.changed.emit()
+
+    @QtCore.Slot(str, float)
+    def setOpacity(self, key, opacity):
+        self.canvas.set_layer(key, opacity=max(0.0, min(1.0, opacity)))
+        self.changed.emit()

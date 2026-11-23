@@ -48,6 +48,8 @@ class FakeCanvas(object):
     def current(self):
         return self.tool_settings["spline" if self.tool == "edit" else self.tool]
 
+    # (the real canvas returns a plain dict too)
+
     def set_option(self, name, value):
         self.tool_settings[self.tool][name] = value
         self.calls.append(("option", name, value))
@@ -64,6 +66,7 @@ def test_tool_options_follow_the_tool():
         pytest.skip("canvas settings need Qt widgets")
     c = FakeCanvas()
     m = panels.tool_options_model(c)
+    assert m.values()["tout"] == 100 and m.error == ""     # raster tool: defaults shown
     vector = ["peak", "tin", "tout"]
     assert set(m.hidden()) == {"spline_mode", "eraser_mode", "eraser_target"} | set(vector)
     c.tool = "spline"

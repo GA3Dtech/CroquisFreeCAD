@@ -624,7 +624,8 @@ class SwatchBar(QtWidgets.QWidget):
 #  Paper / layers panel
 # ----------------------------------------------------------------------
 class LayersPanel(QtWidgets.QWidget):
-    """Paper of the sheet and visibility / opacity of each layer."""
+    """Paper of the sheet and visibility / opacity of each layer: the
+    widget fallback of resources/qml/LayersPanel.qml (custom QML, rule 2)."""
 
     def __init__(self, canvas, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
@@ -718,7 +719,7 @@ class SheetBoard(QtWidgets.QWidget):
         self.options, self.options_bridge, self.options_kind = qml_host.build_panel(
             panels.tool_options_model(self.canvas), self.side)
         side.addWidget(self.options)
-        self.layers = LayersPanel(self.canvas, self.side)
+        self.layers, self.layers_kind = self._layers_panel()
         side.addWidget(self.layers, 1)
         self.status = QtWidgets.QLabel()
         self.status.setContentsMargins(6, 2, 6, 2)
@@ -748,6 +749,23 @@ class SheetBoard(QtWidgets.QWidget):
         self._sync_settings()
         self._sync_status()
         c.setFocus()
+
+    def _layers_panel(self):
+        """Custom QML paper / layers palette, else the widget panel."""
+        from .. import qml_host
+        from ..bridge import I18n, LayersBridge, make_theme
+        if qml_host.quick_usable():
+            try:
+                bridge = LayersBridge(self.canvas, theme=make_theme(self))
+                view = qml_host.make_view("LayersPanel.qml",
+                                          {"layers": bridge, "i18n": I18n(bridge)}, self.side)
+                bridge.setParent(view)      # outlives the QML scene
+                self.layers_bridge = bridge
+                return view, "qml"
+            except Exception as exc:
+                import FreeCAD as App
+                App.Console.PrintWarning("Croquis: QML layers panel unavailable (%s)\n" % exc)
+        return LayersPanel(self.canvas, self.side), "widgets"
 
     @property
     def sheet(self):
