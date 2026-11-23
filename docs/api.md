@@ -31,7 +31,7 @@ from freecad.croquis import api
 | Function | Returns |
 |---|---|
 | `list_sheets(doc=None)` | list of sheet metadata |
-| `create_sheet(doc=None, format="A4L", dpi=150, paper="transparent", plane="XZ", placement=None, label=None)` | metadata of the new sheet |
+| `create_sheet(doc=None, format="A4L", dpi=150, paper="transparent", plane="XZ", placement=None, label=None, width_mm=None, height_mm=None)` | metadata of the new sheet (`format="custom"` with `width_mm`, `height_mm`) |
 | `get_sheet(sheet, doc=None)` | metadata: name, label, format, size in mm, dpi, paper, plane, image plane name, stroke counts, layers |
 | `list_strokes(sheet, layer=None, doc=None)` | strokes in drawing order (stroke format + `index`, `kind`) |
 | `add_strokes(sheet, strokes, doc=None)` | `{"indices": [...], "sheet": metadata}` — all strokes are validated before anything changes |
@@ -39,6 +39,11 @@ from freecad.croquis import api
 | `set_layer(sheet, layer, visible=None, opacity=None, doc=None)` | metadata |
 | `set_paper(sheet, paper, doc=None)` | metadata |
 | `regenerate(sheet, doc=None)` | metadata (re-renders the image plane) |
+| `add_image(sheet, path, x_mm=None, y_mm=None, width_mm=None, layer="images", include_in_render=True, opacity=1.0, rotation=0.0, keep_original=False, doc=None)` | the image element (`id`, `x`, `y`, `w`, `h` in mm, `rotation`, `opacity`, `layer`, `render`, `locked`, `source_px`) — fitted in the sheet by default, picture reduced to the useful resolution unless `keep_original` |
+| `new_sheet_from_image(doc, path, plane="XY", dpi=150, paper="white", long_side_mm=297.0, label=None)` | `{"sheet": metadata, "image": element}` — sheet shaped like the picture |
+| `list_images(sheet, doc=None)` | image elements, bottom to top |
+| `update_image_element(sheet, image_id, doc=None, **changes)` | the element (fields `x y w h rotation opacity render locked layer`) |
+| `delete_image_element(sheet, image_id, doc=None)` | metadata |
 | `render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None)` | path of the PNG (temporary file when `path` is `None`); the document is not changed |
 | `export_png(sheet, path, dpi=None, doc=None)` | path |
 | `describe()` | API version, functions, tools, layers, formats, papers, planes |

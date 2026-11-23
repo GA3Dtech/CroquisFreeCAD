@@ -29,6 +29,8 @@ SheetBoard wraps the canvas with the toolbar, the tool options and the
 paper / layers panel.
 """
 
+import os
+
 from .. import icon, model, prefs
 from ..i18n import tr, tr_data
 from ..qt import QAction, QActionGroup, QtCore, QtGui, QtWidgets, QUndoStack, event_pos
@@ -137,6 +139,7 @@ class SheetCanvas(QtWidgets.QWidget):
             self.setTabletTracking(True)
         self.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.setAttribute(QtCore.Qt.WA_OpaquePaintEvent, True)
+        self.setAcceptDrops(True)
         self.setCursor(QtCore.Qt.CrossCursor)
         self.setMinimumSize(200, 150)
 
@@ -226,10 +229,18 @@ class SheetCanvas(QtWidgets.QWidget):
     def selection(self):
         return getattr(self.handler, "selection", None)
 
+    def selected_image(self):
+        sel = self.selection()
+        return sel if getattr(sel, "kind", None) == "image" else None
+
     def current(self):
         """Settings shown in the toolbar: those of the selected stroke in
         the edit tool, else those of the tool."""
         sel = self.selection()
+        if sel is not None and getattr(sel, "kind", None) == "image":
+            d = dict(self.tool_settings["spline"])
+            d["opacity"] = sel.opacity
+            return d
         if sel is not None:
             d = {"color": sel.color, "size": sel.size, "opacity": sel.opacity}
             d.update(sel.profile())
@@ -240,6 +251,10 @@ class SheetCanvas(QtWidgets.QWidget):
 
     def _set(self, name, value):
         sel = self.selection()
+        if self.selected_image() is not None:
+            if name == "opacity":
+                self.set_image(opacity=value, merge_key="opacity")
+            return
         if sel is not None:
             new = sel.copy()
             if name in model.DEFAULT_PROFILE:
@@ -325,6 +340,94 @@ class SheetCanvas(QtWidgets.QWidget):
         """Copy the rendered sheet to the clipboard (paste it into a mail,
         a report...)."""
         QtWidgets.QApplication.clipboard().setImage(self.compositor.image.copy())
+
+    # ------------------------------------------------------------------
+    #  Images
+    # ------------------------------------------------------------------
+    def pick_image(self, pos):
+        """Topmost unlocked visible image element under the position."""
+        x, y = self.to_mm(pos)
+        for e in reversed(self.sheet.elements):
+            if getattr(e, "kind", None) != "image" or e.locked:
+                continue
+            if not self.sheet.layers.get(e.layer, {}).get("visible", True):
+                continue
+            if e.contains(x, y):
+                return e
+        return None
+
+    def draw_element(self, p, e):
+        """Paint an image element through the view transform (preview)."""
+        img = self.compositor.picture(e)
+        if img is None:
+            return
+        k = self.scale * self.zoom
+        p.save()
+        p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, True)
+        p.setOpacity(e.opacity)
+        p.translate(self.offset.x() + (e.x + e.w / 2.0) * k,
+                    self.offset.y() + (e.y + e.h / 2.0) * k)
+        p.rotate(e.rotation)
+        p.drawImage(QtCore.QRectF(-e.w * k / 2.0, -e.h * k / 2.0, e.w * k, e.h * k), img)
+        p.restore()
+
+    def set_image(self, merge_key=None, index=None, **changes):
+        """Change the selected image element (one undo step, consecutive
+        changes of one setting merged)."""
+        e = self.selected_image()
+        if e is None:
+            return
+        new = e.copy()
+        for k, v in changes.items():
+            setattr(new, k, v)
+        self.undo_stack.push(undo.ReplaceElement(self, e, new, merge_key, index))
+        self.settingsChanged.emit()
+
+    def add_picture(self, img, path=None, centre_mm=None):
+        """New image element from a QImage (paste, drop, capture): fitted
+        in the sheet, or centred on centre_mm. Returns the element."""
+        from .. import api
+        e = api.image_element(self.sheet, img, path)
+        if centre_mm is not None:
+            e.x, e.y = centre_mm[0] - e.w / 2.0, centre_mm[1] - e.h / 2.0
+        self.undo_stack.push(undo.AddElement(self, e))
+        return e
+
+    def paste(self, centre_mm=None, mime=None):
+        """Ctrl+V: a picture from the clipboard (screenshot, image copied
+        from a browser...) or image files copied in a file manager. The
+        active tool does not change. Returns the new elements."""
+        from .. import images
+        if mime is None:
+            mime = QtWidgets.QApplication.clipboard().mimeData()
+        img, paths = images.from_mime(mime)
+        added = []
+        if img is not None and not paths:
+            added.append(self.add_picture(img, centre_mm=centre_mm))
+        for path in paths:
+            try:
+                added.append(self.add_picture(images.read(path), path, centre_mm))
+            except ValueError:
+                pass
+        return added
+
+    def dragEnterEvent(self, event):
+        from .. import images
+        img, paths = images.from_mime(event.mimeData())
+        if img is not None or paths:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    dragMoveEvent = dragEnterEvent
+
+    def dropEvent(self, event):
+        pos = event_pos(event)
+        added = self.paste(self.to_mm(pos), event.mimeData())
+        if added:
+            event.acceptProposedAction()
+        else:
+            event.ignore()
 
     def pick_stroke(self, pos, kinds=None):
         """Topmost visible stroke under the widget position (or None)."""
@@ -539,6 +642,9 @@ class SheetCanvas(QtWidgets.QWidget):
             self.undo_stack.redo()
         elif k == int(QtCore.Qt.Key_C) and ctrl:
             self.copy_render()
+        elif k == int(QtCore.Qt.Key_V) and ctrl:
+            self.handler.cancel()
+            self.paste()
         elif ctrl:
             QtWidgets.QWidget.keyPressEvent(self, event)
         elif self.handler.key(k, mods):
@@ -654,7 +760,7 @@ class LayersPanel(QtWidgets.QWidget):
                 users.setdefault(t["layer"], []).append(tr_data(t["label"]))
         row = 0
         for key, label, _blend in reversed(model.LAYERS):    # top layer first
-            if key not in model.ERASABLE_LAYERS:
+            if key not in model.PANEL_LAYERS:
                 continue
             info = sheet.layers[key]
             check = QtWidgets.QCheckBox(tr_data(label))
@@ -677,6 +783,13 @@ class LayersPanel(QtWidgets.QWidget):
 # ----------------------------------------------------------------------
 #  Board (MDI tab content)
 # ----------------------------------------------------------------------
+def image_filter():
+    """File dialog filter of every picture format Qt reads."""
+    exts = sorted(set("*." + bytes(f).decode().lower()
+                      for f in QtGui.QImageReader.supportedImageFormats()))
+    return tr("Images ({patterns})").format(patterns=" ".join(exts))
+
+
 def export_png_dialog(parent, sheet, default_path):
     """Ask for a file name and write the sheet as PNG. Returns the path or
     None."""
@@ -719,6 +832,9 @@ class SheetBoard(QtWidgets.QWidget):
         self.options, self.options_bridge, self.options_kind = qml_host.build_panel(
             panels.tool_options_model(self.canvas), self.side)
         side.addWidget(self.options)
+        self.image_panel, self.image_bridge, self.image_kind = qml_host.build_panel(
+            panels.image_model(self.canvas), self.side)
+        side.addWidget(self.image_panel)
         self.layers, self.layers_kind = self._layers_panel()
         side.addWidget(self.layers, 1)
         self.status = QtWidgets.QLabel()
@@ -840,6 +956,9 @@ class SheetBoard(QtWidgets.QWidget):
         a.setToolTip(tr("Erase every stroke of the sheet (can be undone)"))
         a.triggered.connect(self._clear)
         tb.addSeparator()
+        a = tb.addAction(QtGui.QIcon(icon("InsertImage.svg")), tr("Insert image…"))
+        a.setToolTip(tr("Put a picture on the sheet (also Ctrl+V or drag and drop)"))
+        a.triggered.connect(self.insert_image)
         a = tb.addAction(QtGui.QIcon(icon("ExportPng.svg")), tr("Export PNG…"))
         a.setToolTip(tr("Save the sheet as a PNG image"))
         a.triggered.connect(lambda: export_png_dialog(self, self.sheet, self.export_path))
@@ -871,6 +990,12 @@ class SheetBoard(QtWidgets.QWidget):
             w.setValue(v)
             w.blockSignals(False)
         self.options_bridge.refresh()
+        image = c.selected_image() is not None
+        self.image_panel.setVisible(image)
+        if image:
+            self.image_bridge.refresh()
+        for w in (self.color_btn, self.swatches, self.size_spin):
+            w.setEnabled(not editing_nothing and not image)
 
     def _sync_status(self):
         s = self.sheet
@@ -880,6 +1005,18 @@ class SheetBoard(QtWidgets.QWidget):
                "{n} stroke(s)").format(w=s.width, h=s.height, dpi=s.dpi, pw=w, ph=h,
                                        zoom=int(round(self.canvas.zoom * 100)),
                                        n=len(s.strokes)))
+
+    def insert_image(self):
+        from .. import images
+        path, _flt = QtWidgets.QFileDialog.getOpenFileName(
+            self, tr("Insert image"), self.export_path and os.path.dirname(self.export_path),
+            image_filter())
+        if not path:
+            return
+        try:
+            self.canvas.add_picture(images.read(path), path)
+        except ValueError as exc:
+            QtWidgets.QMessageBox.warning(self, "Croquis", str(exc))
 
     def _pick_color(self):
         col = QtWidgets.QColorDialog.getColor(QtGui.QColor(self.canvas.current()["color"]),

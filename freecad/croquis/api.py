@@ -70,7 +70,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.0.0"
+API_VERSION = "1.1.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -170,6 +170,7 @@ def _sheet_info(obj):
         "plane": sheet_mod.plane_of(obj),
         "image_plane": obj.ImagePlane.Name if obj.ImagePlane is not None else None,
         "strokes": len(data.strokes),
+        "images": len(data.images()),
         "strokes_per_layer": counts,
         "layers": [{"key": k, "label": label, "blend": blend,
                     "visible": bool(data.layers[k]["visible"]),
@@ -282,14 +283,18 @@ def list_sheets(doc=None):
 
 
 def create_sheet(doc=None, format="A4L", dpi=150, paper="transparent", plane="XZ",
-                 placement=None, label=None):
-    """New sheet and its image plane. format: key of model.FORMATS; plane:
-    XY / XZ / YZ; placement: optional FreeCAD Placement of the image plane
-    (overrides plane). Returns the sheet metadata."""
+                 placement=None, label=None, width_mm=None, height_mm=None):
+    """New sheet and its image plane. format: key of model.FORMATS, or
+    "custom" with width_mm and height_mm; plane: XY / XZ / YZ; placement:
+    optional FreeCAD Placement of the image plane (overrides plane).
+    Returns the sheet metadata."""
     from . import sheet as sheet_mod
     d = _doc(doc)
-    if format not in [k for k, _l, _w, _h in model.FORMATS]:
-        raise InvalidArgumentError("format must be one of %s, got %r"
+    size = None
+    if format == "custom":
+        size = (_num(width_mm, "width_mm", 10, 5000), _num(height_mm, "height_mm", 10, 5000))
+    elif format not in [k for k, _l, _w, _h in model.FORMATS]:
+        raise InvalidArgumentError("format must be one of %s or custom, got %r"
                                    % (", ".join(k for k, _l, _w, _h in model.FORMATS), format))
     if isinstance(dpi, bool) or not isinstance(dpi, int) or not 10 <= dpi <= 1200:
         raise InvalidArgumentError("dpi must be an integer in [10, 1200], got %r" % (dpi,))
@@ -303,7 +308,7 @@ def create_sheet(doc=None, format="A4L", dpi=150, paper="transparent", plane="XZ
     _ensure_qt()
 
     def run():
-        obj = sheet_mod.create_sheet(d, format, dpi, paper, plane, label)
+        obj = sheet_mod.create_sheet(d, format, dpi, paper, plane, label, size=size)
         if placement is not None:
             obj.ImagePlane.Placement = placement
         return obj
@@ -421,7 +426,179 @@ def delete_strokes(sheet, indices, doc=None):
 
 
 # ----------------------------------------------------------------------
-#  Images
+#  Image elements (pictures on the sheet)
+# ----------------------------------------------------------------------
+IMAGE_FIELDS = ("x", "y", "w", "h", "rotation", "opacity", "render", "locked", "layer")
+
+
+def _image_out(e):
+    d = e.to_dict()
+    d.pop("file", None)
+    return d
+
+
+def _find_image(data, image_id):
+    for e in data.images():
+        if e.id == image_id:
+            return e
+    raise InvalidArgumentError("no image element %r on the sheet" % (image_id,))
+
+
+def image_element(data, img, path, x_mm=None, y_mm=None, width_mm=None, layer="images",
+                  render=True, opacity=1.0, rotation=0.0, keep_original=False, camera=None,
+                  margin=0.05):
+    """New ImageElement for a QImage on `data` (placed, picture reduced and
+    written to a temporary file registered in data.files). Shared by the
+    API and the board (paste, drop, capture)."""
+    from . import images
+    if width_mm is None:
+        x, y, w, h = model.fit_rect(img.width(), img.height(), data.width, data.height, margin)
+    else:
+        w = _num(width_mm, "width_mm", 0.1, 10000)
+        h = w * img.height() / float(img.width())
+        x, y = (data.width - w) / 2.0, (data.height - h) / 2.0
+    if x_mm is not None:
+        x = _num(x_mm, "x_mm")
+    if y_mm is not None:
+        y = _num(y_mm, "y_mm")
+    if not keep_original:
+        img = images.reduce(img, *images.useful_size(w, h, data.dpi))
+    tmp = path if (keep_original and path) else images.save_temp(img, "croquis_image")
+    image_id = data.new_id()
+    e = model.ImageElement(image_id, "Image_" + image_id, x, y, w, h, rotation, opacity, layer,
+                           render, camera=camera, source_px=[img.width(), img.height()])
+    data.files[e.file] = tmp
+    return e
+
+
+def add_image(sheet, path, x_mm=None, y_mm=None, width_mm=None, layer="images",
+              include_in_render=True, opacity=1.0, rotation=0.0, keep_original=False,
+              doc=None):
+    """Put a picture file on the sheet (content image: drawn in the image
+    plane unless include_in_render is False). By default it fits inside the
+    sheet, centred, proportions kept; width_mm sets its width (height from
+    the proportions), x_mm / y_mm its top left corner. The picture is
+    reduced to the resolution the sheet can use unless keep_original.
+    Returns the image element."""
+    from . import images
+    obj = _sheet(sheet, doc)
+    if layer not in model.LAYER_KEYS or layer == "underlay":
+        raise InvalidArgumentError("layer must be one of the drawing layers, got %r" % (layer,))
+    opacity = _num(opacity, "opacity", 0.0, 1.0)
+    rotation = _num(rotation, "rotation", -3600, 3600)
+    if not isinstance(path, str) or not os.path.isfile(path):
+        raise InvalidArgumentError("no image file %r" % (path,))
+    _ensure_qt()
+    try:
+        img = images.read(path)
+    except ValueError as exc:
+        raise InvalidArgumentError(str(exc))
+
+    temps = []
+
+    def change(data):
+        e = image_element(data, img, path, x_mm, y_mm, width_mm, layer,
+                          bool(include_in_render), opacity, rotation, keep_original)
+        data.elements.append(e)
+        temps.append(data.files[e.file])
+        return e
+    try:
+        e = _edit(obj, None, tr("Edit sketch sheet"), change)
+    finally:
+        _remove_temps(temps, keep=path)
+    return _image_out(e)
+
+
+def _remove_temps(paths, keep=None):
+    """Temporary pictures, once the document has its own copy."""
+    for p in paths:
+        if p and p != keep and os.path.isfile(p):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
+
+
+def new_sheet_from_image(doc, path, plane="XY", dpi=150, paper="white", long_side_mm=297.0,
+                         label=None):
+    """New sheet whose proportions follow the picture (long side
+    long_side_mm), with the picture filling it. Returns {"sheet": metadata,
+    "image": element}."""
+    from . import images
+    if not isinstance(path, str) or not os.path.isfile(path):
+        raise InvalidArgumentError("no image file %r" % (path,))
+    _ensure_qt()
+    try:
+        img = images.read(path)
+    except ValueError as exc:
+        raise InvalidArgumentError(str(exc))
+    long_side_mm = _num(long_side_mm, "long_side_mm", 20, 5000)
+    k = long_side_mm / float(max(img.width(), img.height()))
+    w, h = round(img.width() * k, 2), round(img.height() * k, 2)
+    info = create_sheet(doc, "custom", dpi, paper, plane, label=label, width_mm=w, height_mm=h)
+    obj = _sheet(info["name"], doc)
+    temps = []
+
+    def change(data):
+        e = image_element(data, img, path, margin=0.0)
+        data.elements.append(e)
+        temps.append(data.files[e.file])
+        return e
+    try:
+        e = _edit(obj, None, tr("Edit sketch sheet"), change)
+    finally:
+        _remove_temps(temps, keep=path)
+    return {"sheet": _sheet_info(obj), "image": _image_out(e)}
+
+
+def list_images(sheet, doc=None):
+    """Image elements of a sheet, bottom to top."""
+    from . import sheet as sheet_mod
+    return [_image_out(e) for e in sheet_mod.sheet_data(_sheet(sheet, doc)).images()]
+
+
+def update_image_element(sheet, image_id, doc=None, **changes):
+    """Change an image element: x, y, w, h (mm), rotation (degrees),
+    opacity (0..1), render (bool: drawn in the image plane), locked (bool),
+    layer. Returns the element."""
+    bad = set(changes) - set(IMAGE_FIELDS)
+    if bad:
+        raise InvalidArgumentError("unknown image field(s): %s" % ", ".join(sorted(bad)))
+    checked = {}
+    for k, v in changes.items():
+        if k in ("render", "locked"):
+            if not isinstance(v, bool):
+                raise InvalidArgumentError("%s must be True or False" % k)
+            checked[k] = v
+        elif k == "layer":
+            if v not in model.LAYER_KEYS or v == "underlay":
+                raise InvalidArgumentError("layer must be a drawing layer, got %r" % (v,))
+            checked[k] = v
+        elif k == "opacity":
+            checked[k] = _num(v, k, 0.0, 1.0)
+        elif k in ("w", "h"):
+            checked[k] = _num(v, k, 0.1, 10000)
+        else:
+            checked[k] = _num(v, k)
+
+    def change(data):
+        e = _find_image(data, image_id)
+        for k, v in checked.items():
+            setattr(e, k, v)
+        return e
+    return _image_out(_edit(sheet, doc, tr("Edit sketch sheet"), change))
+
+
+def delete_image_element(sheet, image_id, doc=None):
+    """Remove an image element (and its stored picture)."""
+    def change(data):
+        data.elements.remove(_find_image(data, image_id))
+    _edit(sheet, doc, tr("Edit sketch sheet"), change)
+    return get_sheet(sheet, doc)
+
+
+# ----------------------------------------------------------------------
+#  Rendering
 # ----------------------------------------------------------------------
 def render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None):
     """Render the sheet to a PNG file (a temporary file when path is None)
@@ -437,7 +614,7 @@ def render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None):
         os.close(fd)
     _ensure_qt()
     data = sheet_mod.sheet_data(obj)
-    if not compositor.save_png(data, path, dpi=dpi):
+    if not compositor.save_png(data, path, dpi=dpi, export=not include_underlay):
         raise InvalidArgumentError("could not write %r" % (path,))
     return path
 
@@ -453,8 +630,9 @@ def export_png(sheet, path, dpi=None, doc=None):
 #  Introspection
 # ----------------------------------------------------------------------
 PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper", "set_layer",
-          "list_strokes", "add_strokes", "delete_strokes", "render_png", "export_png",
-          "describe"]
+          "list_strokes", "add_strokes", "delete_strokes", "add_image", "new_sheet_from_image",
+          "list_images", "update_image_element", "delete_image_element", "render_png",
+          "export_png", "describe"]
 
 GUI_ONLY = []
 

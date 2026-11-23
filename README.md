@@ -31,7 +31,9 @@ Version 0.2.
 | Paper (transparent, white, layout pad, tinted grey, kraft) and layer visibility / opacity | done |
 | Tablet pressure, pressure simulated from mouse speed, undo / redo | done |
 | Sheet stored in the document, linked image plane on XY / XZ / YZ, PNG export | done |
-| 3D view capture as underlay, camera-aligned plane, ellipses, perspective grids | v0.3 |
+| Pictures pasted (Ctrl+V), dropped or inserted, new sheet from the clipboard; move, resize, rotate, opacity, stacking | done (v0.3) |
+| Manual 3D view capture, 3D view underlay (plane and camera), arrows, text and callouts | v0.3 |
+| Ellipses, perspective grids | later |
 | SVG export, TechDraw, chisel tip, custom palettes | v0.4 |
 
 The full design (in French) is in [docs/specification_fr.md](docs/specification_fr.md).
@@ -53,6 +55,8 @@ Requires FreeCAD 1.0 or newer (Qt5 or Qt6).
 |---|---|
 | **New sketch sheet** | Choose a format, resolution, paper and plane; creates a `Croquis` sheet and its image plane, and opens the drawing board. |
 | **Edit sketch sheet** | Reopens the drawing board of the selected sheet (or double-click the sheet in the tree, from any workbench). |
+| **New sheet from clipboard** | Creates a sheet shaped like the picture in the clipboard (screenshot, copied image), with the picture on it, and opens the board. |
+| **Insert image…** | Puts a picture file on the selected sheet. |
 | **Export sheet as PNG** | Saves the selected sheet as a PNG (transparent where the paper is transparent). |
 
 The drawing board belongs to the Croquis workbench: switching to another
@@ -72,6 +76,14 @@ picture.
 | `S` | Spline stroke | Lines | Thin, wide in the middle, pointed. *Freehand* is smoothed into Bezier curves; *Control points*: click the points, click the last one again (or double-click, `Enter`, right-click) to finish, `Backspace` removes the last point, `Esc` cancels. |
 | `E` | Eraser | All or one | *Soft* removes pixels; *Whole strokes* deletes every stroke it touches. |
 | `V` | Edit vector strokes | – | Click a line or spline: drag its anchors, handles or the whole stroke; colour, size, opacity and width profile apply to it; `Delete` removes it. |
+
+**Pictures**: `Ctrl+V` pastes the clipboard picture (or image files copied
+in a file manager), image files can be dropped on the board, and
+*Insert image…* opens a file. A picture fits the sheet without distortion;
+with the edit tool (`V`) drag it, resize it by a corner (`Shift`: free
+proportions), rotate it with the round handle; its panel sets opacity,
+whether it shows in the 3D image, lock, stacking. Erasers never touch
+pictures. `Ctrl+C` copies the rendered sheet.
 
 With the raster tools, `Shift` at the press draws a straight line. Line and
 spline strokes have a width profile: position of the widest point, start

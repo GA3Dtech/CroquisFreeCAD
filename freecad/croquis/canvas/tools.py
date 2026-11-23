@@ -553,23 +553,119 @@ class SplineTool(Tool):
 # ----------------------------------------------------------------------
 #  Editing vector strokes
 # ----------------------------------------------------------------------
+def image_handles(e, handle_mm):
+    """Corner points (TL, TR, BR, BL) and rotation handle of an image
+    element, in sheet mm."""
+    cx, cy = e.x + e.w / 2.0, e.y + e.h / 2.0
+    a = math.radians(e.rotation)
+    ca, sa = math.cos(a), math.sin(a)
+
+    def world(lx, ly):
+        return (cx + lx * ca - ly * sa, cy + lx * sa + ly * ca)
+    hw, hh = e.w / 2.0, e.h / 2.0
+    corners = [world(-hw, -hh), world(hw, -hh), world(hw, hh), world(-hw, hh)]
+    return corners, world(0, -hh - handle_mm), world(0, -hh)
+
+
 class EditTool(Tool):
     """Select a line or spline stroke and reshape it: drag an anchor (its
     handles follow), a handle (the opposite one stays aligned) or the
     stroke itself (moves it). Colour, size, opacity and width profile
-    changes in the toolbar apply to the selection; Delete removes it."""
+    changes in the toolbar apply to the selection; Delete removes it.
+
+    Pictures (image elements) are selected too: drag to move, corners to
+    resize keeping the proportions (Shift: free), the round handle to
+    rotate (Shift: 15° steps); Delete removes; locked ones are skipped."""
 
     show_size = False
+    ROTATE_PX = 26.0            # rotation handle above the top edge
 
     def __init__(self, canvas, key):
         Tool.__init__(self, canvas, key)
         self.selection = None
         self.drag = None        # (index or "all", start mm, original points)
+        self.idrag = None       # image: (mode, start mm, original element)
         self.preview = VectorPreview(canvas)
+        self.ipreview = None    # image element being dragged
 
     @property
     def busy(self):
-        return self.drag is not None
+        return self.drag is not None or self.idrag is not None
+
+    def _is_image(self, obj=None):
+        obj = self.selection if obj is None else obj
+        return getattr(obj, "kind", None) == "image"
+
+    # --- images
+    def _handle_mm(self):
+        return self.ROTATE_PX / (self.c.scale * self.c.zoom)
+
+    def _pick_image_handle(self, pos):
+        if not self._is_image():
+            return None
+        corners, rot, _top = image_handles(self.selection, self._handle_mm())
+        for mode, p in [("rotate", rot)] + list(enumerate(corners)):
+            w = self.c.to_widget(p)
+            if math.hypot(pos.x() - w.x(), pos.y() - w.y()) <= HANDLE_PX:
+                return mode
+        return None
+
+    def _start_image_drag(self, mode, pos):
+        c = self.c
+        e = self.selection
+        self.idrag = (mode, c.to_mm(pos), e.copy())
+        self.ipreview = e.copy()
+        c.compositor.hidden.add(id(e))
+        c.sheet_changed(c.compositor.refresh_elements([e]))
+
+    def _move_image(self, pos, mods):
+        mode, (x0, y0), orig = self.idrag
+        x, y = self.c.to_mm(pos)
+        e = orig.copy()
+        if mode == "move":
+            e.x, e.y = orig.x + x - x0, orig.y + y - y0
+        elif mode == "rotate":
+            cx, cy = orig.x + orig.w / 2.0, orig.y + orig.h / 2.0
+            ang = math.degrees(math.atan2(y - cy, x - cx)) + 90.0
+            if _shift(mods):
+                ang = round(ang / 15.0) * 15.0
+            e.rotation = ((ang + 180.0) % 360.0) - 180.0
+        else:
+            corners, _r, _t = image_handles(orig, 0)
+            fx, fy = corners[(mode + 2) % 4]            # opposite corner stays
+            a = math.radians(orig.rotation)
+            ca, sa = math.cos(a), math.sin(a)
+            dx, dy = x - fx, y - fy
+            lx, ly = dx * ca + dy * sa, -dx * sa + dy * ca     # local frame
+            sx = 1.0 if mode in (1, 2) else -1.0
+            sy = 1.0 if mode in (2, 3) else -1.0
+            w, h = max(abs(lx), 1.0), max(abs(ly), 1.0)
+            if not _shift(mods):
+                k = max(w / orig.w, h / orig.h)
+                w, h = orig.w * k, orig.h * k
+            lcx, lcy = sx * w / 2.0, sy * h / 2.0
+            cx, cy = fx + lcx * ca - lcy * sa, fy + lcx * sa + lcy * ca
+            e.w, e.h = w, h
+            e.x, e.y = cx - w / 2.0, cy - h / 2.0
+        self.ipreview = e
+        self.c.update()
+
+    def _release_image(self, pos, mods):
+        self._move_image(pos, mods)
+        old, new = self.selection, self.ipreview
+        self._end_image_drag()
+        changed = any(abs(getattr(old, k) - getattr(new, k)) > 1e-6
+                      for k in ("x", "y", "w", "h", "rotation"))
+        if changed:
+            self.c.undo_stack.push(undo.ReplaceElement(self.c, old, new))
+        else:
+            self.c.sheet_changed(self.c.compositor.refresh_elements([old]))
+
+    def _end_image_drag(self):
+        if self.selection is not None:
+            self.c.compositor.hidden.discard(id(self.selection))
+        self.idrag = None
+        self.ipreview = None
 
     def select(self, stroke):
         if stroke is not self.selection:
@@ -590,11 +686,21 @@ class EditTool(Tool):
 
     def press(self, pos, pressure, mods):
         c = self.c
-        index = self._pick_handle(pos)
+        if self._is_image():
+            mode = self._pick_image_handle(pos)
+            if mode is None and self.selection.contains(*c.to_mm(pos)):
+                mode = "move"
+            if mode is not None:
+                self._start_image_drag(mode, pos)
+                return
+        index = self._pick_handle(pos) if not self._is_image() else None
         if index is None:
             hit = c.pick_stroke(pos, kinds=("vector",))
             if hit is None:
-                self.select(None)
+                img = c.pick_image(pos)
+                self.select(img)
+                if img is not None:
+                    self._start_image_drag("move", pos)
                 return
             self.select(hit)
             index = "all"
@@ -605,6 +711,9 @@ class EditTool(Tool):
         self.preview.set(sel.copy())
 
     def move(self, pos, pressure, mods):
+        if self.idrag is not None:
+            self._move_image(pos, mods)
+            return
         if self.drag is None:
             return
         index, (x0, y0), orig = self.drag
@@ -639,6 +748,9 @@ class EditTool(Tool):
         self.c.update()
 
     def release(self, pos, pressure, mods):
+        if self.idrag is not None:
+            self._release_image(pos, mods)
+            return
         if self.drag is None:
             return
         self.move(pos, pressure, mods)
@@ -660,6 +772,10 @@ class EditTool(Tool):
         self.preview.set(None)
 
     def cancel(self):
+        if self.idrag is not None:
+            sel = self.selection
+            self._end_image_drag()
+            self.c.sheet_changed(self.c.compositor.refresh_elements([sel]))
         if self.drag is not None:
             sel = self.selection
             self._end_drag()
@@ -671,7 +787,10 @@ class EditTool(Tool):
         if k in (int(QtCore.Qt.Key_Delete), int(QtCore.Qt.Key_Backspace)):
             sel = self.selection
             self.cancel()
-            self.c.undo_stack.push(undo.RemoveStrokes(self.c, [sel]))
+            if self._is_image(sel):
+                self.c.undo_stack.push(undo.RemoveElements(self.c, [sel]))
+            else:
+                self.c.undo_stack.push(undo.RemoveStrokes(self.c, [sel]))
             return True
         if k == int(QtCore.Qt.Key_Escape):
             self.cancel()
@@ -681,8 +800,25 @@ class EditTool(Tool):
 
     def paint_sheet(self, painter):
         self.preview.paint(painter)
+        if self.ipreview is not None:
+            self.c.draw_element(painter, self.ipreview)
 
     def paint_overlay(self, painter):
+        if self._is_image():
+            e = self.ipreview if self.ipreview is not None else self.selection
+            corners, rot, top = image_handles(e, self._handle_mm())
+            w = [self.c.to_widget(p) for p in corners]
+            blue = QtGui.QColor(45, 123, 229)
+            painter.setBrush(QtCore.Qt.NoBrush)
+            painter.setPen(QtGui.QPen(blue, 1.5))
+            painter.drawPolygon(QtGui.QPolygonF(w))
+            painter.drawLine(self.c.to_widget(top), self.c.to_widget(rot))
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 1))
+            painter.setBrush(blue)
+            for p in w:
+                painter.drawRect(QtCore.QRectF(p.x() - 4, p.y() - 4, 8, 8))
+            painter.drawEllipse(self.c.to_widget(rot), 5.0, 5.0)
+            return
         stroke = self.preview.stroke if self.drag is not None else self.selection
         if stroke is None:
             return

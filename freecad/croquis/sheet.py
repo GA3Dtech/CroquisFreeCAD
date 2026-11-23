@@ -59,11 +59,42 @@ def plane_rotation(plane):
 
 
 def sheet_data(obj):
-    """model.SheetData of a sheet object (paper and dpi from its properties)."""
+    """model.SheetData of a sheet object (paper and dpi from its properties,
+    picture files from its file properties)."""
     data = model.SheetData.from_json(obj.SheetData)
     data.paper = obj.Paper
     data.dpi = int(obj.Resolution)
+    for e in data.elements:
+        name = getattr(e, "file", None)
+        if name and hasattr(obj, name):
+            data.files[name] = getattr(obj, name)
     return data
+
+
+IMAGE_PREFIX = "Image_"
+
+
+def sync_files(obj, data):
+    """Store the picture of every image element in a file property of the
+    sheet (App::PropertyFileIncluded: the file is saved inside the .FCStd),
+    drop the properties no element uses any more."""
+    used = set()
+    for e in data.images():
+        name = e.file
+        used.add(name)
+        path = data.files.get(name)
+        if not path:
+            continue
+        if not hasattr(obj, name):
+            obj.addProperty("App::PropertyFileIncluded", name, "Croquis images",
+                            "Picture of an image element of the sheet")
+            obj.setEditorMode(name, 2)
+        if getattr(obj, name) != path:
+            setattr(obj, name, path)
+        data.files[name] = getattr(obj, name)      # the document's own copy
+    for name in list(obj.PropertiesList):
+        if name.startswith(IMAGE_PREFIX) and name not in used:
+            obj.removeProperty(name)
 
 
 # ----------------------------------------------------------------------
@@ -189,10 +220,11 @@ class ViewProviderSheet(object):
 #  Creation and image
 # ----------------------------------------------------------------------
 def create_sheet(doc, fmt="A4L", dpi=150, paper="transparent", plane="XZ",
-                 label=None):
-    """New sheet and its image plane (inside the caller's transaction)."""
+                 label=None, size=None):
+    """New sheet and its image plane (inside the caller's transaction).
+    size: (width, height) in mm instead of a format."""
     import Image  # noqa: F401  (registers Image::ImagePlane)
-    w, h = model.format_size(fmt)
+    w, h = size if size is not None else model.format_size(fmt)
     data = model.SheetData(w, h, dpi, paper)
 
     obj = doc.addObject("App::FeaturePython", "Croquis")
@@ -255,6 +287,7 @@ def write(obj, data):
             obj.Resolution = int(data.dpi)
     finally:
         _storing = False
+    sync_files(obj, data)
     obj.SheetData = data.to_json()
     obj.SheetWidth = data.width
     obj.SheetHeight = data.height
@@ -348,6 +381,15 @@ def open_board(obj):
     mdi.setActiveSubWindow(sub)
     board.canvas.setFocus()
     return board
+
+
+def board_of(obj):
+    """The open board of a sheet, or None."""
+    sub = _boards.get(_key(obj))
+    try:
+        return sub.widget() if sub is not None else None
+    except RuntimeError:
+        return None
 
 
 def close_board(obj, save=True):

@@ -37,7 +37,7 @@ def N_(text):
     return text
 
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 
 
 # ----------------------------------------------------------------------
@@ -50,7 +50,18 @@ FORMAT_VERSION = 1
 #  kept untouched and written back, so an old addon never destroys data it
 #  does not understand.
 # ----------------------------------------------------------------------
-MIGRATIONS = {}
+def _v1_to_v2(d):
+    """v2 (Croquis 0.3): content images and annotations. Adds the "images"
+    layer and the "elements" list; strokes are unchanged."""
+    d = dict(d)
+    layers = dict(d.get("layers") or {})
+    layers.setdefault("images", {"opacity": 1.0, "visible": True})
+    d["layers"] = layers
+    d.setdefault("elements", [])
+    return d
+
+
+MIGRATIONS = {1: _v1_to_v2}
 
 
 def migrate(data):
@@ -90,7 +101,8 @@ PAPERS = [
 
 # Layers from bottom to top: key, label, blend mode
 LAYERS = [
-    ("underlay", N_("Underlay"), "normal"),
+    ("underlay", N_("Underlay"), "normal"),     # 3D view guide, not exported
+    ("images", N_("Images"), "normal"),         # pasted / captured pictures
     ("construction", N_("Construction"), "normal"),
     ("marker", N_("Marker"), "multiply"),
     ("lines", N_("Lines"), "normal"),
@@ -100,6 +112,8 @@ LAYER_KEYS = [k for k, _l, _b in LAYERS]
 
 # Layers the eraser can work on (layer "*" of an eraser stroke = all of them)
 ERASABLE_LAYERS = ["construction", "marker", "lines", "highlights"]
+# Layers shown in the board's layer panel (the guide has its own controls)
+PANEL_LAYERS = ["images"] + ERASABLE_LAYERS
 ALL_LAYERS = "*"
 
 # Drawing tools and their defaults. Sizes in mm.
@@ -268,6 +282,115 @@ def load_palettes():
     return [(name, colors) for _o, name, colors in out]
 
 
+def fit_rect(img_w, img_h, area_w, area_h, margin=0.05):
+    """(x, y, w, h) of a picture of img_w x img_h pixels fitted inside an
+    area of area_w x area_h mm, centred, proportions kept, leaving `margin`
+    (share of the area) free on each side."""
+    if img_w <= 0 or img_h <= 0:
+        raise ValueError("empty image")
+    aw, ah = area_w * (1 - 2 * margin), area_h * (1 - 2 * margin)
+    k = min(aw / img_w, ah / img_h)
+    w, h = img_w * k, img_h * k
+    return (area_w - w) / 2.0, (area_h - h) / 2.0, w, h
+
+
+# ----------------------------------------------------------------------
+#  Elements (format v2): items that are not strokes
+# ----------------------------------------------------------------------
+class ImageElement(object):
+    """A content picture on the sheet (pasted, imported or captured).
+    Position (top left corner before rotation), size in mm, rotation in
+    degrees (clockwise, around the centre), opacity, layer; `render`: drawn
+    in the image plane and the exports; `locked`: not selectable. `file`
+    names the document property holding the picture (never base64 in the
+    JSON); `camera` keeps the 3D view of a capture (or None)."""
+
+    kind = "image"
+    KEYS = ("kind", "id", "file", "x", "y", "w", "h", "rotation", "opacity", "layer",
+            "render", "locked", "camera", "source_px")
+
+    def __init__(self, id, file, x, y, w, h, rotation=0.0, opacity=1.0, layer="images",
+                 render=True, locked=False, camera=None, source_px=None):
+        self.id = id
+        self.file = file
+        self.x, self.y, self.w, self.h = float(x), float(y), float(w), float(h)
+        self.rotation = float(rotation)
+        self.opacity = float(opacity)
+        self.layer = layer
+        self.render = bool(render)
+        self.locked = bool(locked)
+        self.camera = camera
+        self.source_px = source_px      # [w, h] of the stored picture
+        self.extra = {}
+
+    def copy(self):
+        e = ImageElement.from_dict(self.to_dict())
+        return e
+
+    def bounds(self):
+        """(xmin, ymin, xmax, ymax) in mm of the rotated rectangle."""
+        import math
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        a = math.radians(self.rotation)
+        hw = abs(self.w / 2.0 * math.cos(a)) + abs(self.h / 2.0 * math.sin(a))
+        hh = abs(self.w / 2.0 * math.sin(a)) + abs(self.h / 2.0 * math.cos(a))
+        return cx - hw, cy - hh, cx + hw, cy + hh
+
+    def contains(self, px, py):
+        """Is the sheet point (mm) inside the rotated rectangle?"""
+        import math
+        cx, cy = self.x + self.w / 2.0, self.y + self.h / 2.0
+        a = -math.radians(self.rotation)
+        dx, dy = px - cx, py - cy
+        lx = dx * math.cos(a) - dy * math.sin(a)
+        ly = dx * math.sin(a) + dy * math.cos(a)
+        return abs(lx) <= self.w / 2.0 and abs(ly) <= self.h / 2.0
+
+    def to_dict(self):
+        d = dict(self.extra)
+        d.update({"kind": "image", "id": self.id, "file": self.file,
+                  "x": round(self.x, 3), "y": round(self.y, 3),
+                  "w": round(self.w, 3), "h": round(self.h, 3),
+                  "rotation": round(self.rotation, 3), "opacity": round(self.opacity, 3),
+                  "layer": self.layer, "render": self.render, "locked": self.locked})
+        if self.camera is not None:
+            d["camera"] = self.camera
+        if self.source_px is not None:
+            d["source_px"] = list(self.source_px)
+        return d
+
+    @classmethod
+    def from_dict(cls, d):
+        e = cls(d.get("id", ""), d.get("file", ""), d.get("x", 0), d.get("y", 0),
+                d.get("w", 10), d.get("h", 10), d.get("rotation", 0), d.get("opacity", 1),
+                d.get("layer", "images"), d.get("render", True), d.get("locked", False),
+                d.get("camera"), d.get("source_px"))
+        e.extra = dict((k, v) for k, v in d.items() if k not in cls.KEYS)
+        return e
+
+
+class UnknownElement(object):
+    """An element of a kind this version does not know: kept as is."""
+
+    def __init__(self, data):
+        self.data = dict(data)
+        self.kind = data.get("kind", "?")
+
+    def copy(self):
+        return UnknownElement(self.data)
+
+    def to_dict(self):
+        return dict(self.data)
+
+
+ELEMENT_KINDS = {"image": ImageElement}
+
+
+def element_from_dict(d):
+    cls = ELEMENT_KINDS.get(d.get("kind"))
+    return cls.from_dict(d) if cls is not None else UnknownElement(d)
+
+
 # ----------------------------------------------------------------------
 #  Strokes and sheet
 # ----------------------------------------------------------------------
@@ -349,6 +472,8 @@ class SheetData(object):
         self.strokes = []
         self.version = FORMAT_VERSION   # version read (kept when newer)
         self.extra = {}                 # unknown top-level keys, kept as is
+        self.elements = []              # images, texts... (format v2)
+        self.files = {}                 # element file name -> local path (runtime)
 
     # --- size in pixels at the sheet resolution
     @property
@@ -360,6 +485,16 @@ class SheetData(object):
         s = self.scale
         return max(1, int(round(self.width * s))), max(1, int(round(self.height * s)))
 
+    def images(self):
+        return [e for e in self.elements if e.kind == "image"]
+
+    def new_id(self, prefix="img"):
+        used = set(getattr(e, "id", None) for e in self.elements)
+        n = 1
+        while "%s%d" % (prefix, n) in used:
+            n += 1
+        return "%s%d" % (prefix, n)
+
     def layer_strokes(self, layer):
         """Strokes painted on a layer, in order, erasers working on it
         included."""
@@ -367,7 +502,7 @@ class SheetData(object):
                 if s.layer == layer or (s.layer == ALL_LAYERS and layer in ERASABLE_LAYERS)]
 
     # --- serialization
-    KEYS = ("version", "width", "height", "dpi", "paper", "layers", "strokes")
+    KEYS = ("version", "width", "height", "dpi", "paper", "layers", "strokes", "elements")
 
     def to_dict(self):
         d = dict(self.extra)
@@ -377,6 +512,7 @@ class SheetData(object):
             "dpi": self.dpi, "paper": self.paper,
             "layers": self.layers,
             "strokes": [s.to_dict() for s in self.strokes],
+            "elements": [e.to_dict() for e in self.elements],
         })
         return d
 
@@ -403,4 +539,5 @@ class SheetData(object):
             # unknown layers (newer files) are kept but never drawn
             sheet.layers.setdefault(k, {}).update(v)
         sheet.strokes = [Stroke.from_dict(s) for s in d.get("strokes", [])]
+        sheet.elements = [element_from_dict(e) for e in d.get("elements", [])]
         return sheet

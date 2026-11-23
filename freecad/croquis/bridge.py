@@ -335,7 +335,7 @@ class LayersBridge(QtCore.QObject):
                 users.setdefault(t["layer"], []).append(tr_data(t["label"]))
         self._layer_defs = [(k, tr_data(label), ", ".join(users.get(k, [])))
                             for k, label, _b in reversed(model.LAYERS)
-                            if k in model.ERASABLE_LAYERS]
+                            if k in model.PANEL_LAYERS]
         signal = getattr(canvas, "sheetEdited", None)
         if signal is not None:
             signal.connect(self.changed)

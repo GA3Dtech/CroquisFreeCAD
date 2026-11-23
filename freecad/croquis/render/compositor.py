@@ -28,7 +28,11 @@ then every visible layer with its opacity and blend mode (model.LAYERS).
 
 Eraser strokes are painted with DestinationOut on the layers they work on,
 in stroke order: they remove what was drawn before them, not after.
-`hidden` holds strokes left out while the board edits or erases them.
+`hidden` holds strokes and elements left out while the board edits them.
+
+Image elements (format v2) are drawn on their layer (normally "images")
+before the strokes of that layer. `export=True` (image plane, PNG export)
+leaves out the images whose `render` flag is off and the underlay guide.
 """
 
 from .. import model
@@ -54,8 +58,10 @@ class Compositor(object):
     """Layer caches and composite image of a sheet at a given resolution
     (pixels per mm, the sheet's own by default)."""
 
-    def __init__(self, sheet, scale=None, paper=True):
+    def __init__(self, sheet, scale=None, paper=True, export=False):
         self.sheet = sheet
+        self.export = export
+        self._pictures = {}     # path -> QImage
         self.scale = scale or sheet.scale
         self.paper = paper
         self.w = max(1, int(round(sheet.width * self.scale)))
@@ -124,16 +130,80 @@ class Compositor(object):
         finally:
             painter.end()
 
+    # --- images
+    def picture(self, element):
+        """QImage of an image element (cached), None when missing."""
+        path = self.sheet.files.get(element.file)
+        if not path:
+            return None
+        img = self._pictures.get(path)
+        if img is None:
+            reader = QtGui.QImageReader(path)
+            reader.setAutoTransform(True)       # EXIF orientation
+            img = reader.read()
+            if img.isNull():
+                return None
+            self._pictures[path] = img
+        return img
+
+    def _paint_element(self, e):
+        if e.kind != "image" or id(e) in self.hidden or e.layer not in model.LAYER_KEYS:
+            return None
+        if self.export and not e.render:
+            return None
+        img = self.picture(e)
+        if img is None:
+            return None
+        s = self.scale
+        painter = QtGui.QPainter(self._layer(e.layer))
+        try:
+            painter.setRenderHint(QtGui.QPainter.SmoothPixmapTransform, True)
+            painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+            painter.setOpacity(e.opacity)
+            painter.translate((e.x + e.w / 2.0) * s, (e.y + e.h / 2.0) * s)
+            painter.rotate(e.rotation)
+            painter.drawImage(QtCore.QRectF(-e.w * s / 2.0, -e.h * s / 2.0, e.w * s, e.h * s),
+                              img)
+        finally:
+            painter.end()
+        return self.element_rect(e)
+
+    def element_rect(self, e):
+        b = e.bounds()
+        s = self.scale
+        r = QtCore.QRect(int(b[0] * s) - 2, int(b[1] * s) - 2,
+                         int((b[2] - b[0]) * s) + 5, int((b[3] - b[1]) * s) + 5)
+        return r.intersected(self.bounds)
+
     def rebuild_layer(self, key):
         self.layers.pop(key, None)
+        for e in self.sheet.elements:
+            if getattr(e, "layer", None) == key:
+                self._paint_element(e)
         for s in self.sheet.layer_strokes(key):
             self._paint_stroke(s, only=key)
 
     def rebuild(self):
         self.layers = {}
-        for s in self.sheet.strokes:
-            self._paint_stroke(s)
+        for key in model.LAYER_KEYS:
+            self.rebuild_layer(key)
         self.compose()
+
+    def refresh_elements(self, elements):
+        """Repaint the layers of elements (added, removed, hidden or
+        changed) and recompose their area. Returns the dirty QRect."""
+        keys, rect = [], None
+        for e in elements:
+            if getattr(e, "layer", None) in model.LAYER_KEYS and e.layer not in keys:
+                keys.append(e.layer)
+            if hasattr(e, "bounds"):
+                r = self.element_rect(e)
+                rect = r if rect is None else rect.united(r)
+        for k in keys:
+            self.rebuild_layer(k)
+        if rect is not None:
+            self.compose(rect)
+        return rect
 
     def refresh_strokes(self, strokes):
         """Repaint the layers of `strokes` (added, removed, hidden or
@@ -177,13 +247,14 @@ class Compositor(object):
             color = model.paper_color(self.sheet.paper) if self.paper else None
             painter.fillRect(self.bounds, QtGui.QColor(color) if color
                              else QtGui.QColor(0, 0, 0, 0))
-            if self.underlay is not None and self.sheet.layers["underlay"]["visible"]:
+            if self.underlay is not None and not self.export \
+                    and self.sheet.layers["underlay"]["visible"]:
                 painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
                 painter.setOpacity(self.sheet.layers["underlay"]["opacity"])
                 painter.drawImage(QtCore.QRectF(self.bounds), self.underlay)
             for key, _label, blend in model.LAYERS:
                 img = self.layers.get(key)
-                info = self.sheet.layers[key]
+                info = self.sheet.layers.get(key, {"visible": True, "opacity": 1.0})
                 if img is None or not info["visible"]:
                     continue
                 painter.setCompositionMode(blend_mode(blend))
@@ -194,16 +265,17 @@ class Compositor(object):
         return rect
 
 
-def render_sheet(sheet, dpi=None, paper=True):
-    """Final image of a sheet (QImage), at its own resolution or `dpi`."""
-    comp = Compositor(sheet, scale=(dpi / 25.4) if dpi else None, paper=paper)
+def render_sheet(sheet, dpi=None, paper=True, export=True):
+    """Final image of a sheet (QImage), at its own resolution or `dpi`.
+    export=True: as in the image plane (no guide, only rendered images)."""
+    comp = Compositor(sheet, scale=(dpi / 25.4) if dpi else None, paper=paper, export=export)
     return comp.image
 
 
-def save_png(sheet, path, dpi=None, paper=True):
+def save_png(sheet, path, dpi=None, paper=True, export=True):
     """Write the sheet as a PNG (alpha where the paper is transparent),
     with its resolution recorded in the file. Returns True on success."""
-    img = render_sheet(sheet, dpi, paper)
+    img = render_sheet(sheet, dpi, paper, export)
     dots_per_metre = int(round((dpi or sheet.dpi) / 0.0254))
     img.setDotsPerMeterX(dots_per_metre)
     img.setDotsPerMeterY(dots_per_metre)

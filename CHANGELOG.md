@@ -36,11 +36,23 @@ All notable changes to this project are documented here. The format follows
   `resources/qml/`); preference "Use QML panels". The New sheet dialog and
   the board's tool options use it.
 - Custom QML paper / layers palette on the board (widget fallback kept).
+- Pictures on sheets: paste with Ctrl+V (clipboard picture or copied image
+  files), drag and drop, "Insert image…", "New sheet from clipboard";
+  edit tool moves, resizes and rotates them, image panel (opacity, shown in
+  the 3D image or not, lock, stacking, delete). Pictures are stored in the
+  `.FCStd` (one file property per picture, reduced to the useful resolution
+  by default) and drawn in the image plane under the strokes.
+- API 1.1: `add_image`, `new_sheet_from_image`, `list_images`,
+  `update_image_element`, `delete_image_element`; `create_sheet` accepts
+  `format="custom"` with `width_mm` / `height_mm`.
 - Public API `freecad.croquis.api` (sheets, strokes, layers, paper,
   PNG rendering, `describe()`) with typed errors (`errors.py`), documented
   in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.
 
 ### Changed
+- Sheet format version 2 (migration from v1 on read): new `images` layer
+  and `elements` list. Croquis 0.2.0 drops the `elements` of a v2 sheet when
+  it saves it (it does not keep unknown fields); later versions keep them.
 - The version is read from `package.xml` only.
 - The "New sketch sheet" and "Export sheet as PNG" commands go through
   the public API.

@@ -23,11 +23,12 @@ hand twice. The models call api.py; they hold no drawing logic.
 
     new_sheet_model(doc)        "New sketch sheet" dialog
     tool_options_model(canvas)  options of the active tool on the board
+    image_model(canvas)         properties of the selected picture
 """
 
 from . import model, prefs
 from .i18n import tr, tr_data
-from .panel_model import PanelModel, Param
+from .panel_model import Action, PanelModel, Param
 
 
 # ----------------------------------------------------------------------
@@ -144,3 +145,73 @@ def tool_options_model(canvas):
               unit="%", tip=tr("0 %: blunt end, 100 %: pointed end"), visible=is_vector),
     ]
     return PanelModel(tr("Tool options"), params, hint=hint)
+
+
+# ----------------------------------------------------------------------
+#  Image properties (board side panel, edit tool)
+# ----------------------------------------------------------------------
+def image_model(canvas):
+    """Properties of the picture selected with the edit tool: opacity,
+    shown in the image plane or not, locked, rotation, width (height
+    follows the proportions), stacking, delete."""
+    c = canvas
+
+    def img():
+        return c.selected_image()
+
+    def getter(name, scale=1.0, default=0):
+        def get():
+            e = img()
+            return default if e is None else getattr(e, name) * scale
+        return get
+
+    def setter(name, scale=1.0):
+        return lambda value: c.set_image(merge_key=name, **{name: value / scale})
+
+    def set_width(value):
+        e = img()
+        if e is not None and value > 0:
+            k = value / e.w
+            cx, cy = e.x + e.w / 2.0, e.y + e.h / 2.0
+            c.set_image(merge_key="size", w=value, h=e.h * k,
+                        x=cx - value / 2.0, y=cy - e.h * k / 2.0)
+
+    def restack(top):
+        e = img()
+        if e is not None:
+            c.set_image(index=len(c.sheet.elements) if top else 0)
+
+    def delete():
+        e = img()
+        if e is not None:
+            from .canvas import undo
+            c.undo_stack.push(undo.RemoveElements(c, [e]))
+
+    def size_note():
+        e = img()
+        if e is None or not e.source_px:
+            return ""
+        return tr("{w} × {h} px stored").format(w=e.source_px[0], h=e.source_px[1])
+
+    params = [
+        Param("opacity", tr("Opacity:"), "int", lambda: int(round(getter("opacity")() * 100)),
+              lambda v: c.set_image(merge_key="opacity", opacity=v / 100.0),
+              min=0, max=100, step=5, unit="%"),
+        Param("render", tr("Show in the 3D image and exports"), "bool",
+              getter("render", default=True), lambda v: c.set_image(render=bool(v)),
+              tip=tr("Off: the picture only helps while drawing")),
+        Param("locked", tr("Locked"), "bool", getter("locked", default=False),
+              lambda v: c.set_image(locked=bool(v)),
+              tip=tr("A locked picture can no longer be selected on the board")),
+        Param("rotation", tr("Rotation:"), "number", getter("rotation"), setter("rotation"),
+              min=-180, max=180, step=5, decimals=1, unit="°"),
+        Param("width", tr("Width:"), "number", getter("w"), set_width, min=1, max=5000,
+              step=5, decimals=1, unit="mm"),
+        Param("size", "", "note", size_note),
+    ]
+    actions = [
+        Action("front", tr("Bring to front"), lambda: restack(True)),
+        Action("back", tr("Send to back"), lambda: restack(False)),
+        Action("delete", tr("Delete image"), delete),
+    ]
+    return PanelModel(tr("Image"), params, actions)

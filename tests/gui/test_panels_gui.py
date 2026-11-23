@@ -102,7 +102,7 @@ def test_layers_panel_qml_and_fallback(doc, monkeypatch):
     if qml_host.quick_usable():
         assert b.layers_kind == "qml"
         root = b.layers.rootObject()
-        for key in model.ERASABLE_LAYERS:
+        for key in model.PANEL_LAYERS:
             assert find_item(root, "layer_" + key) is not None
         for key, _l, _c in model.PAPERS:
             assert find_item(root, "paper_" + key) is not None

@@ -104,6 +104,55 @@ def new_sheet():
     sheet.open_board(obj)
 
 
+def insert_image():
+    """Picture file on the selected sheet (its open board when there is one)."""
+    import os
+
+    from . import api, sheet
+    from .canvas.view import image_filter
+    from .qt import QtWidgets
+    obj = selected_sheets()[0]
+    board = sheet.board_of(obj)
+    if board is not None:
+        board.insert_image()
+        return
+    folder = os.path.dirname(obj.Document.FileName) if obj.Document.FileName \
+        else os.path.expanduser("~")
+    path, _flt = QtWidgets.QFileDialog.getOpenFileName(
+        Gui.getMainWindow(), tr("Insert image"), folder, image_filter())
+    if path:
+        api.add_image(obj, path)
+
+
+def new_sheet_from_clipboard():
+    """New sheet shaped like the picture of the clipboard, picture on it,
+    board open."""
+    from . import api, images, prefs, sheet
+    from .qt import QtWidgets
+    img, paths = images.from_mime(QtWidgets.QApplication.clipboard().mimeData())
+    tmp = None
+    if paths:
+        path = paths[0]
+    elif img is not None:
+        path = tmp = images.save_temp(img, "croquis_clipboard")
+    else:
+        QtWidgets.QMessageBox.information(
+            Gui.getMainWindow(), "Croquis",
+            tr("The clipboard holds no picture. Copy a screenshot or an image first."))
+        return
+    try:
+        res = api.new_sheet_from_image(App.ActiveDocument, path, plane=prefs.get("SheetPlane"),
+                                       dpi=prefs.get("SheetDpi"), label=tr("Sketch"))
+    finally:
+        if tmp:
+            import os
+            os.remove(tmp)
+    obj = App.ActiveDocument.getObject(res["sheet"]["name"])
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(obj)
+    sheet.open_board(obj)
+
+
 def edit_sheet():
     from . import sheet
     for obj in selected_sheets():
@@ -147,6 +196,14 @@ def register():
             edit_sheet, "EditSheet.svg", tr("Edit sketch sheet"),
             tr("Open the drawing board of the selected sheet (or double-click it)"),
             needs=lambda: bool(selected_sheets()))),
+        ("Croquis_NewSheetFromClipboard", _Command(
+            new_sheet_from_clipboard, "NewSheetClipboard.svg",
+            tr("New sheet from clipboard"),
+            tr("Create a sheet shaped like the picture of the clipboard (screenshot, "
+               "copied image), with the picture on it, and open the drawing board"))),
+        ("Croquis_InsertImage", _Command(
+            insert_image, "InsertImage.svg", tr("Insert image…"),
+            tr("Put a picture file on the selected sheet"), needs=_one_sheet)),
         ("Croquis_ExportPng", _Command(
             export_png, "ExportPng.svg", tr("Export sheet as PNG"),
             tr("Save the selected sheet as a PNG image (transparent where the paper is)"),
@@ -156,4 +213,4 @@ def register():
         Gui.addCommand(name, cmd)
     TOOLBAR[:] = [name for name, _c in cmds]
     MENU[:] = list(TOOLBAR)
-    CONTEXT[:] = ["Croquis_EditSheet", "Croquis_ExportPng"]
+    CONTEXT[:] = ["Croquis_EditSheet", "Croquis_InsertImage", "Croquis_ExportPng"]

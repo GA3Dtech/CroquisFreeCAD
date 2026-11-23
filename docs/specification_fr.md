@@ -163,9 +163,12 @@ Croquis/
 - Crayon gras, calques, papiers.
 - Édition par double-clic, traits stockés dans le document.
 
-**v0.3 : l'overpaint**
-- Capture de la vue 3D en sous-couche, plan d'image aligné sur la caméra.
-- Ellipses guidées, grilles de perspective, rehauts.
+**v0.3 : images, captures et annotations**
+- Images collées ou importées (presse-papiers, glisser-déposer, fichier), nouvelle feuille depuis le presse-papiers, calque `images`, format de feuille v2.
+- Capture manuelle de la vue 3D pour la commenter.
+- Sous-couche vue 3D (guide non exporté) : vue alignée sur le plan de la feuille, puis vue caméra (overpaint).
+- Outil flèche, zones de texte et légendes.
+- Toujours prévus : ellipses guidées, grilles de perspective, rehauts avancés.
 
 **v0.4 et au-delà**
 - Export SVG, envoi vers TechDraw.

@@ -39,7 +39,8 @@ def test_tool_keys_and_kinds():
 
 def test_layers_and_erasable():
     assert set(model.ERASABLE_LAYERS) <= set(model.LAYER_KEYS)
-    assert "underlay" not in model.ERASABLE_LAYERS
+    assert "underlay" not in model.ERASABLE_LAYERS and "images" not in model.ERASABLE_LAYERS
+    assert model.LAYER_KEYS[:3] == ["underlay", "images", "construction"]
     blends = set(b for _k, _l, b in model.LAYERS)
     assert blends <= {"normal", "multiply"}
 
@@ -87,12 +88,19 @@ def test_legacy_json(path):
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
     sheet = model.SheetData.from_json(text)
-    assert sheet.version == 1
+    assert sheet.version == model.FORMAT_VERSION       # migrated on read
     assert sheet.strokes, "legacy sheets all have strokes"
     for s in sheet.strokes:
         assert s.kind in ("raster", "vector", "eraser")
-    # writing back changes nothing but the separators
-    assert json.loads(sheet.to_json()) == json.loads(text)
+    # writing back changes nothing but what the migrations add
+    old, new = json.loads(text), json.loads(sheet.to_json())
+    assert new["strokes"] == old["strokes"]
+    for k in ("width", "height", "dpi", "paper"):
+        assert new[k] == old[k]
+    for k, v in old["layers"].items():
+        assert new["layers"][k] == v
+    assert new["elements"] == [] and new["layers"]["images"] == {"opacity": 1.0,
+                                                                 "visible": True}
 
 
 def test_stroke_params_and_profile():
@@ -115,6 +123,59 @@ def test_empty_and_degenerate():
 # ----------------------------------------------------------------------
 #  Migration and newer files
 # ----------------------------------------------------------------------
+def test_migrate_v1_to_v2():
+    v1 = {"version": 1, "width": 10, "height": 20, "dpi": 72, "paper": "white",
+          "layers": {"lines": {"opacity": 0.5, "visible": False}},
+          "strokes": [{"t": "pencil", "c": "#000000", "s": 1, "o": 1, "l": "construction",
+                       "p": [1, 2, 1]}]}
+    v2 = model.migrate(v1)
+    assert v2["version"] == 2 and v2["elements"] == []
+    assert v2["layers"]["lines"] == {"opacity": 0.5, "visible": False}
+    assert v2["layers"]["images"] == {"opacity": 1.0, "visible": True}
+    assert v2["strokes"] == v1["strokes"]
+    assert model.migrate(v2) == v2                      # idempotent
+
+
+def test_v2_round_trip_with_elements():
+    sheet = model.SheetData(100, 50, 72, "white")
+    img = model.ImageElement("img1", "Image_img1", 10, 5, 40, 30, rotation=15, opacity=0.8,
+                             camera={"type": "ortho"}, source_px=[400, 300])
+    sheet.elements = [img, model.UnknownElement({"kind": "hologram", "z": 1})]
+    again = model.SheetData.from_json(sheet.to_json())
+    assert again.version == 2
+    e = again.elements[0]
+    assert (e.kind, e.id, e.file, e.x, e.w, e.rotation, e.opacity, e.camera, e.source_px) == \
+        ("image", "img1", "Image_img1", 10, 40, 15, 0.8, {"type": "ortho"}, [400, 300])
+    assert again.elements[1].to_dict() == {"kind": "hologram", "z": 1}
+    assert sheet.new_id() == "img2"
+    assert [x.id for x in again.images()] == ["img1"]
+
+
+def test_image_element_geometry():
+    e = model.ImageElement("i", "f", 10, 10, 40, 20)
+    assert e.bounds() == (10, 10, 50, 30)
+    assert e.contains(30, 20) and not e.contains(5, 20)
+    e.rotation = 90
+    b = e.bounds()
+    assert b == pytest.approx((20, 0, 40, 40))
+    assert e.contains(30, 2) and not e.contains(12, 20)
+
+
+@pytest.mark.parametrize("img", [(1600, 900), (900, 1600), (1000, 1000)])
+@pytest.mark.parametrize("fmt", [f[0] for f in model.FORMATS])
+def test_fit_rect(img, fmt):
+    aw, ah = model.format_size(fmt)
+    x, y, w, h = model.fit_rect(img[0], img[1], aw, ah)
+    assert w / h == pytest.approx(img[0] / img[1])           # proportions kept
+    assert x == pytest.approx(aw - x - w) and y == pytest.approx(ah - y - h)   # centred
+    assert w <= aw * 0.9 + 1e-9 and h <= ah * 0.9 + 1e-9
+    assert w == pytest.approx(aw * 0.9) or h == pytest.approx(ah * 0.9)       # fills one side
+    x, y, w, h = model.fit_rect(img[0], img[1], aw, ah, margin=0)
+    assert w == pytest.approx(aw) or h == pytest.approx(ah)
+    with pytest.raises(ValueError):
+        model.fit_rect(0, 10, aw, ah)
+
+
 def test_migrate_without_version():
     d = model.migrate({"width": 10, "height": 20})
     assert d["version"] == model.FORMAT_VERSION

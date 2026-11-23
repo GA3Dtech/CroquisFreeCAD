@@ -140,7 +140,7 @@ def test_legacy_file(path, tmp_path, artifacts_dir):
         for o in sheets:
             stored = load(o.ImagePlane.ImageFile)       # rendered by v0.2.0
             data = sheet.sheet_data(o)
-            assert data.version == 1 and data.strokes
+            assert data.version == model.FORMAT_VERSION and data.strokes
             sheet.update_image(o, data)                 # regenerate today
             again = load(o.ImagePlane.ImageFile)
             ref = str(tmp_path / ("ref_%s.png" % o.Name))
