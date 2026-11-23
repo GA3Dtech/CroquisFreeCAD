@@ -621,108 +621,8 @@ class SwatchBar(QtWidgets.QWidget):
 
 
 # ----------------------------------------------------------------------
-#  Tool options (second row) and paper / layers panel
+#  Paper / layers panel
 # ----------------------------------------------------------------------
-def _percent_spin(tooltip):
-    s = QtWidgets.QSpinBox()
-    s.setRange(0, 100)
-    s.setSuffix(" %")
-    s.setToolTip(tooltip)
-    return s
-
-
-class ToolOptions(QtWidgets.QWidget):
-    """Options of the active tool: spline mode, eraser mode and layers,
-    width profile of vector strokes, and a short hint."""
-
-    def __init__(self, canvas, parent=None):
-        QtWidgets.QWidget.__init__(self, parent)
-        self.canvas = canvas
-        lay = QtWidgets.QHBoxLayout(self)
-        lay.setContentsMargins(6, 2, 6, 2)
-
-        self.spline_mode = QtWidgets.QComboBox()
-        self.spline_mode.addItem(tr("Freehand, smoothed"), "freehand")
-        self.spline_mode.addItem(tr("Control points"), "points")
-        self.spline_mode.currentIndexChanged.connect(
-            lambda _i: canvas.set_option("mode", self.spline_mode.currentData()))
-
-        self.eraser_mode = QtWidgets.QComboBox()
-        self.eraser_mode.addItem(tr("Soft (pixels)"), "soft")
-        self.eraser_mode.addItem(tr("Whole strokes"), "strokes")
-        self.eraser_mode.currentIndexChanged.connect(
-            lambda _i: canvas.set_option("mode", self.eraser_mode.currentData()))
-        self.eraser_target = QtWidgets.QComboBox()
-        self.eraser_target.addItem(tr("All layers"), model.ALL_LAYERS)
-        for k, label, _b in model.LAYERS:
-            if k in model.ERASABLE_LAYERS:
-                self.eraser_target.addItem(tr_data(label), k)
-        self.eraser_target.currentIndexChanged.connect(
-            lambda _i: canvas.set_option("target", self.eraser_target.currentData()))
-        self.eraser_label = QtWidgets.QLabel(tr("Erase on:"))
-
-        self.profile = QtWidgets.QWidget()
-        pl = QtWidgets.QHBoxLayout(self.profile)
-        pl.setContentsMargins(0, 0, 0, 0)
-        self.peak = _percent_spin(tr("Position of the widest point along the stroke"))
-        self.peak.setRange(5, 95)
-        self.tin = _percent_spin(tr("0 %: blunt start, 100 %: pointed start"))
-        self.tout = _percent_spin(tr("0 %: blunt end, 100 %: pointed end"))
-        for label, w, name in ((tr("Widest at:"), self.peak, "peak"),
-                               (tr("Start taper:"), self.tin, "tin"),
-                               (tr("End taper:"), self.tout, "tout")):
-            pl.addWidget(QtWidgets.QLabel(label))
-            pl.addWidget(w)
-            w.valueChanged.connect(lambda v, n=name: canvas.set_profile(n, v / 100.0))
-
-        self.hint = QtWidgets.QLabel()
-        self.hint.setStyleSheet("color: gray;")
-        for w in (self.spline_mode, self.eraser_mode, self.eraser_label,
-                  self.eraser_target, self.profile):
-            lay.addWidget(w)
-        lay.addWidget(self.hint, 1)
-        self.sync()
-
-    def sync(self):
-        c = self.canvas
-        tool = c.tool
-        st = c.current()
-        vector = model.TOOLS.get(tool, {}).get("kind") == "vector" or \
-            (tool == "edit" and c.selection() is not None)
-        self.spline_mode.setVisible(tool == "spline")
-        for w in (self.eraser_mode, self.eraser_label, self.eraser_target):
-            w.setVisible(tool == "eraser")
-        self.profile.setVisible(vector)
-        for combo, value in ((self.spline_mode, c.tool_settings["spline"]["mode"]),
-                             (self.eraser_mode, c.tool_settings["eraser"]["mode"]),
-                             (self.eraser_target, c.tool_settings["eraser"]["target"])):
-            combo.blockSignals(True)
-            combo.setCurrentIndex(max(0, combo.findData(value)))
-            combo.blockSignals(False)
-        if vector:
-            for w, name in ((self.peak, "peak"), (self.tin, "tin"), (self.tout, "tout")):
-                w.blockSignals(True)
-                w.setValue(int(round(st[name] * 100)))
-                w.blockSignals(False)
-        self.hint.setText(self._hint(tool))
-
-    def _hint(self, tool):
-        if tool == "line":
-            return tr("Drag from one end to the other. Shift: angle in 15° steps.")
-        if tool == "spline":
-            if self.canvas.tool_settings["spline"]["mode"] == "points":
-                return tr("Click the points of the curve; click the last one again, "
-                          "double-click or Enter to finish. Backspace: remove the last "
-                          "point, Esc: cancel.")
-            return tr("Draw freely: the stroke is smoothed into an editable curve.")
-        if tool == "eraser":
-            return tr("Shift: straight line.")
-        if tool == "edit":
-            return tr("Click a line or spline stroke, then drag its points or the stroke "
-                      "itself. Delete removes it.")
-        return tr("Shift: straight line.")
-
-
 class LayersPanel(QtWidgets.QWidget):
     """Paper of the sheet and visibility / opacity of each layer."""
 
@@ -810,24 +710,31 @@ class SheetBoard(QtWidgets.QWidget):
         self.toolbar = QtWidgets.QToolBar(self)
         self.toolbar.setIconSize(QtCore.QSize(22, 22))
         self._build_toolbar()
-        self.options = ToolOptions(self.canvas, self)
-        self.layers = LayersPanel(self.canvas, self)
+        # side panel: tool options (generic panel model) above paper / layers
+        from .. import panels, qml_host
+        self.side = QtWidgets.QWidget(self)
+        side = QtWidgets.QVBoxLayout(self.side)
+        side.setContentsMargins(0, 0, 0, 0)
+        self.options, self.options_bridge, self.options_kind = qml_host.build_panel(
+            panels.tool_options_model(self.canvas), self.side)
+        side.addWidget(self.options)
+        self.layers = LayersPanel(self.canvas, self.side)
+        side.addWidget(self.layers, 1)
         self.status = QtWidgets.QLabel()
         self.status.setContentsMargins(6, 2, 6, 2)
 
         split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         split.addWidget(self.canvas)
-        split.addWidget(self.layers)
+        split.addWidget(self.side)
         split.setStretchFactor(0, 1)
         split.setStretchFactor(1, 0)
         split.setCollapsible(0, False)
-        split.setSizes([1000, 210])
+        split.setSizes([1000, 240])
 
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         lay.addWidget(self.toolbar)
-        lay.addWidget(self.options)
         lay.addWidget(split, 1)
         lay.addWidget(self.status)
 
@@ -945,7 +852,7 @@ class SheetBoard(QtWidgets.QWidget):
             w.blockSignals(True)
             w.setValue(v)
             w.blockSignals(False)
-        self.options.sync()
+        self.options_bridge.refresh()
 
     def _sync_status(self):
         s = self.sheet
