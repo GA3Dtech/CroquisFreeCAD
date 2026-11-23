@@ -40,8 +40,8 @@ the language of FreeCAD. It is read once per session: changing it needs a
 restart of FreeCAD (menu and toolbar texts are created at startup).
 """
 
-import os
 import json
+import os
 
 import FreeCAD as App
 

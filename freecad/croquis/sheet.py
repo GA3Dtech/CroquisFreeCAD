@@ -36,7 +36,7 @@ import tempfile
 
 import FreeCAD as App
 
-from . import model, icon
+from . import icon, model
 from .i18n import tr
 
 TYPE = "Croquis::Sheet"
@@ -279,8 +279,9 @@ def open_board(obj):
     """Open (or bring forward) the drawing board of a sheet in a tab of
     FreeCAD's main window."""
     import FreeCADGui as Gui
-    from .qt import QtCore, QtGui, QtWidgets
+
     from .canvas.view import SheetBoard
+    from .qt import QtCore, QtGui, QtWidgets
 
     # The board belongs to the Croquis workbench: leaving the workbench
     # closes it (init_gui.CroquisWorkbench.Deactivated)

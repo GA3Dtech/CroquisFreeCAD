@@ -36,8 +36,8 @@ go through the canvas undo stack (undo.py), never straight into the sheet.
 import math
 import time
 
-from ..qt import QtCore, QtGui
 from .. import model, prefs
+from ..qt import QtCore, QtGui
 from ..render import brushes
 from ..render import stroke_geom as geom
 from . import undo

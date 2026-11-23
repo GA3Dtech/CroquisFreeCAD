@@ -10,13 +10,12 @@ freecad.croquis and runs this module at startup.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import icon, __version__
-from . import commands
+from . import __version__, commands, icon
 from .i18n import tr
 
 commands.register()
 
-from . import prefs
+from . import prefs  # noqa: E402  (after the commands are registered)
 
 try:
     # The preference dialog looks for an icon named "preferences-<group>"

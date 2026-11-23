@@ -29,15 +29,13 @@ SheetBoard wraps the canvas with the toolbar, the tool options and the
 paper / layers panel.
 """
 
-from ..qt import (QtCore, QtGui, QtWidgets, QUndoStack, QAction, QActionGroup,
-                  event_pos)
-from .. import model, prefs, icon
+from .. import icon, model, prefs
 from ..i18n import tr, tr_data
-from ..render import compositor as comp_mod
+from ..qt import QAction, QActionGroup, QtCore, QtGui, QtWidgets, QUndoStack, event_pos
 from ..render import brushes
+from ..render import compositor as comp_mod
 from ..render import stroke_geom as geom
-from . import undo
-from . import tools
+from . import tools, undo
 
 ZOOM_MIN = 0.03
 ZOOM_MAX = 16.0

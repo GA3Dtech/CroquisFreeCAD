@@ -1,0 +1,20 @@
+# pre-commit install  (hooks run from the repository root)
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+  - repo: local
+    hooks:
+      - id: i18n-check
+        name: translations complete
+        entry: python3 tools/i18n.py check
+        language: system
+        pass_filenames: false
+        files: \.(py|qml|json)$
+      - id: unit-tests
+        name: unit tests
+        entry: python3 -m pytest -q -m unit tests/unit
+        language: system
+        pass_filenames: false
+        files: \.py$

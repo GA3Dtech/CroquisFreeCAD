@@ -96,8 +96,8 @@ class NewSheetDialog(object):
     the preferences, remembered for next time)."""
 
     def __init__(self):
-        from .qt import QtWidgets
         from . import prefs
+        from .qt import QtWidgets
         self.dialog = d = QtWidgets.QDialog(Gui.getMainWindow())
         d.setWindowTitle(tr("New sketch sheet"))
         form = QtWidgets.QFormLayout(d)
@@ -163,9 +163,10 @@ def edit_sheet():
 
 
 def export_png():
+    import os
+
     from . import sheet
     from .canvas.view import export_png_dialog
-    import os
     obj = selected_sheets()[0]
     folder = os.path.dirname(obj.Document.FileName) if obj.Document.FileName \
         else os.path.expanduser("~")

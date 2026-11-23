@@ -31,8 +31,8 @@ in stroke order: they remove what was drawn before them, not after.
 `hidden` holds strokes left out while the board edits or erases them.
 """
 
-from ..qt import QtCore, QtGui
 from .. import model
+from ..qt import QtCore, QtGui
 from . import brushes
 
 FORMAT = QtGui.QImage.Format_ARGB32_Premultiplied

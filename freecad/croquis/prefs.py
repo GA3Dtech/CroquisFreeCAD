@@ -26,7 +26,7 @@ shows every setting.
 
 import FreeCAD as App
 
-from .i18n import tr, tr_data, LANGUAGES
+from .i18n import LANGUAGES, tr, tr_data
 
 PARAM_PATH = "User parameter:BaseApp/Preferences/Mod/Croquis"
 

@@ -39,8 +39,8 @@ the same segment code at the target resolution: sharp at any scale.
 import math
 import random
 
-from ..qt import QtCore, QtGui
 from .. import model
+from ..qt import QtCore, QtGui
 from . import stroke_geom as geom
 
 # Grain texture size in pixels, and the resolution it was designed for

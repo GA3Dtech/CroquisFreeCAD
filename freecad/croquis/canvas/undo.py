@@ -27,8 +27,8 @@ document in one FreeCAD transaction.
 and repaints with sheet_changed(rect).
 """
 
-from ..qt import QUndoCommand
 from ..i18n import tr
+from ..qt import QUndoCommand
 
 
 class AddStroke(QUndoCommand):

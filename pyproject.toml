@@ -1,0 +1,26 @@
+# Tooling configuration only: Croquis is installed as a FreeCAD addon
+# (package.xml), not as a Python package.
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+extend-exclude = [".venv", "tests/fixtures/legacy"]
+
+[tool.ruff.lint]
+# Cautious rule set: pycodestyle errors / warnings, pyflakes, import order
+select = ["E", "F", "W", "I"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["FreeCAD", "FreeCADGui", "Image", "pivy", "PySide", "PySide2", "PySide6"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+    "unit: pure Python, no FreeCAD, no Qt",
+    "render: Qt offscreen rendering (PySide6 or FreeCAD's PySide)",
+    "freecad: runs inside freecadcmd with the addon installed",
+    "gui: FreeCAD GUI (offscreen / xvfb)",
+    "vanilla: FreeCAD without any addon",
+    "slow: takes more than a few seconds",
+]
