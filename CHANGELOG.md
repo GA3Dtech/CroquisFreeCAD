@@ -9,6 +9,13 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Development tooling: `pyproject.toml` (ruff, pytest markers),
   `.pre-commit-config.yaml`, `.gitattributes`.
+- Frozen v0.2.0 fixture documents (`tests/fixtures/legacy/v0.2.0`).
+- Unit tests (model, geometry, translations, package metadata).
+- `model.migrate()`: format migrations, applied when a sheet is read.
+
+### Fixed
+- Unknown fields, layers and tools written by a newer version of the addon
+  are kept (and written back) instead of being dropped or drawn as pencil.
 
 ### Changed
 - The version is read from `package.xml` only.

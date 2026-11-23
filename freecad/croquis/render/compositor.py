@@ -82,8 +82,10 @@ class Compositor(object):
     def _paint_stroke(self, stroke, only=None):
         """Lay one stroke on its layer(s) (`only`: that layer only).
         Returns the covered QRect or None."""
-        if id(stroke) in self.hidden:
+        if id(stroke) in self.hidden or stroke.kind == "unknown":
             return None
+        if stroke.kind != "eraser" and stroke.layer not in model.LAYER_KEYS:
+            return None     # layer of a newer version: kept, not drawn
         if stroke.kind == "eraser":
             targets = [k for k in model.eraser_targets(stroke)
                        if self.layers.get(k) is not None and (only is None or k == only)]

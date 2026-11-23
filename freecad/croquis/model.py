@@ -39,6 +39,33 @@ def N_(text):
 
 FORMAT_VERSION = 1
 
+
+# ----------------------------------------------------------------------
+#  Format migrations
+#
+#  Sheet JSON carries "version". Each entry of MIGRATIONS turns a dict of
+#  version n into version n + 1 (returns a new dict). A file without
+#  version is version 1 (v0.1 / v0.2 wrote it, but stay tolerant). A file
+#  NEWER than FORMAT_VERSION is read as is: unknown fields and strokes are
+#  kept untouched and written back, so an old addon never destroys data it
+#  does not understand.
+# ----------------------------------------------------------------------
+MIGRATIONS = {}
+
+
+def migrate(data):
+    """Sheet dict brought to FORMAT_VERSION (or left as is when newer)."""
+    d = dict(data)
+    v = d.get("version")
+    if not isinstance(v, int) or v < 1:
+        v = 1
+    d["version"] = v
+    while v < FORMAT_VERSION:
+        d = MIGRATIONS[v](d)
+        v += 1
+        d["version"] = v
+    return d
+
 # key, label, width mm, height mm
 FORMATS = [
     ("A5L", N_("A5 landscape"), 210.0, 148.0),
@@ -177,7 +204,10 @@ DEFAULT_PROFILE = {"peak": 0.45, "tin": 1.0, "tout": 1.0}
 
 
 def tool_kind(tool):
-    return TOOLS.get(tool, TOOLS["pencil"])["kind"]
+    """Kind of a tool; "unknown" for a tool written by a newer version of
+    the addon (such strokes are kept in the file but not drawn)."""
+    t = TOOLS.get(tool)
+    return t["kind"] if t is not None else "unknown"
 
 
 def eraser_targets(stroke):
@@ -245,7 +275,10 @@ class Stroke(object):
     """One gesture: a tool, its settings at the time, and the input points
     (x mm, y mm, pressure 0..1)."""
 
-    __slots__ = ("tool", "color", "size", "opacity", "layer", "points", "params")
+    __slots__ = ("tool", "color", "size", "opacity", "layer", "points", "params", "extra")
+
+    # keys of the JSON form; anything else is kept in `extra`
+    KEYS = ("t", "c", "s", "o", "l", "p", "q")
 
     def __init__(self, tool, color, size, opacity, layer, points=None, params=None):
         self.tool = tool
@@ -257,14 +290,17 @@ class Stroke(object):
         # (pressure unused), raster strokes: input points
         self.points = points if points is not None else []
         self.params = dict(params) if params else {}
+        self.extra = {}         # unknown JSON keys, written back unchanged
 
     @property
     def kind(self):
         return tool_kind(self.tool)
 
     def copy(self):
-        return Stroke(self.tool, self.color, self.size, self.opacity, self.layer,
-                      list(self.points), self.params)
+        s = Stroke(self.tool, self.color, self.size, self.opacity, self.layer,
+                   list(self.points), self.params)
+        s.extra = dict(self.extra)
+        return s
 
     def profile(self):
         p = dict(DEFAULT_PROFILE)
@@ -284,8 +320,9 @@ class Stroke(object):
         flat = []
         for x, y, p in self.points:
             flat.extend((round(x, 2), round(y, 2), round(p, 3)))
-        d = {"t": self.tool, "c": self.color, "s": round(self.size, 3),
-             "o": round(self.opacity, 3), "l": self.layer, "p": flat}
+        d = dict(self.extra)
+        d.update({"t": self.tool, "c": self.color, "s": round(self.size, 3),
+                  "o": round(self.opacity, 3), "l": self.layer, "p": flat})
         if self.params:
             d["q"] = self.params
         return d
@@ -294,8 +331,10 @@ class Stroke(object):
     def from_dict(cls, d):
         flat = d.get("p", [])
         pts = [(flat[i], flat[i + 1], flat[i + 2]) for i in range(0, len(flat) - 2, 3)]
-        return cls(d.get("t", "pencil"), d.get("c", "#000000"), d.get("s", 1.0),
-                   d.get("o", 1.0), d.get("l", "lines"), pts, d.get("q"))
+        s = cls(d.get("t", "pencil"), d.get("c", "#000000"), d.get("s", 1.0),
+                d.get("o", 1.0), d.get("l", "lines"), pts, d.get("q"))
+        s.extra = dict((k, v) for k, v in d.items() if k not in cls.KEYS)
+        return s
 
 
 class SheetData(object):
@@ -308,6 +347,8 @@ class SheetData(object):
         self.paper = paper
         self.layers = {k: {"opacity": 1.0, "visible": True} for k in LAYER_KEYS}
         self.strokes = []
+        self.version = FORMAT_VERSION   # version read (kept when newer)
+        self.extra = {}                 # unknown top-level keys, kept as is
 
     # --- size in pixels at the sheet resolution
     @property
@@ -326,27 +367,40 @@ class SheetData(object):
                 if s.layer == layer or (s.layer == ALL_LAYERS and layer in ERASABLE_LAYERS)]
 
     # --- serialization
-    def to_json(self):
-        return json.dumps({
-            "version": FORMAT_VERSION,
+    KEYS = ("version", "width", "height", "dpi", "paper", "layers", "strokes")
+
+    def to_dict(self):
+        d = dict(self.extra)
+        d.update({
+            "version": max(FORMAT_VERSION, self.version),
             "width": self.width, "height": self.height,
             "dpi": self.dpi, "paper": self.paper,
             "layers": self.layers,
             "strokes": [s.to_dict() for s in self.strokes],
-        }, separators=(",", ":"))
+        })
+        return d
+
+    def to_json(self):
+        return json.dumps(self.to_dict(), separators=(",", ":"))
 
     @classmethod
     def from_json(cls, text):
-        sheet = cls()
         if not text:
-            return sheet
-        d = json.loads(text)
+            return cls()
+        return cls.from_dict(json.loads(text))
+
+    @classmethod
+    def from_dict(cls, data):
+        sheet = cls()
+        d = migrate(data)
+        sheet.version = d["version"]
+        sheet.extra = dict((k, v) for k, v in d.items() if k not in cls.KEYS)
         sheet.width = float(d.get("width", sheet.width))
         sheet.height = float(d.get("height", sheet.height))
         sheet.dpi = int(d.get("dpi", sheet.dpi))
         sheet.paper = d.get("paper", sheet.paper)
         for k, v in d.get("layers", {}).items():
-            if k in sheet.layers:
-                sheet.layers[k].update(v)
+            # unknown layers (newer files) are kept but never drawn
+            sheet.layers.setdefault(k, {}).update(v)
         sheet.strokes = [Stroke.from_dict(s) for s in d.get("strokes", [])]
         return sheet

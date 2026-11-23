@@ -27,6 +27,7 @@ def build(root, out):
     import freecad
     freecad.__path__.insert(0, os.path.join(root, "freecad"))
     import FreeCAD as App
+
     from freecad.croquis import model, sheet
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
