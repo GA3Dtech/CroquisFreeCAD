@@ -309,6 +309,48 @@ def render_stroke(stroke, scale, limit=None):
         raster.draw_dot()
     else:
         raster.draw_to(len(drawn.points) - 1)
+    if stroke.tool == "arrow":
+        draw_arrow_heads(img, origin, stroke, scale)
     params = raster.params
     img = apply_grain(img, origin, params["grain"], scale, params.get("grain_pressure", 0.0))
     return img, r.topLeft()
+
+
+def draw_arrow_heads(img, origin, stroke, scale):
+    """Heads of an arrow stroke, in the stroke's own buffer (full alpha:
+    the stroke opacity is applied when the buffer is composited)."""
+    prof = stroke.profile()
+    chain = chain_of(stroke)
+    if len(chain) < 2:
+        return
+    length = model.arrow_head_size(stroke.size, prof["head_size"])
+    color = QtGui.QColor(stroke.color)
+    painter = QtGui.QPainter(img)
+    try:
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
+        painter.translate(-origin[0], -origin[1])
+        painter.scale(scale, scale)         # geometry in mm
+        pen = QtGui.QPen(color, stroke.size, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap,
+                         QtCore.Qt.RoundJoin)
+        for at_end, wanted in ((True, prof["head_end"]), (False, prof["head_start"])):
+            if not wanted:
+                continue
+            tip = chain[-1] if at_end else chain[0]
+            kind, g = geom.arrow_head(tip, geom.chain_end_direction(chain, at_end), length,
+                                      prof["head_style"])
+            if kind == "lines":
+                painter.setPen(pen)
+                painter.setBrush(QtCore.Qt.NoBrush)
+                painter.drawPolyline(QtGui.QPolygonF([QtCore.QPointF(*p) for p in g]))
+            elif kind == "polygon":
+                painter.setPen(pen)
+                painter.setBrush(color)
+                painter.drawPolygon(QtGui.QPolygonF([QtCore.QPointF(*p) for p in g]))
+            else:
+                (cx, cy), radius = g
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.setBrush(color)
+                painter.drawEllipse(QtCore.QPointF(cx, cy), radius, radius)
+    finally:
+        painter.end()

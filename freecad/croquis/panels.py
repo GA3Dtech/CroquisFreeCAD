@@ -99,8 +99,12 @@ def tool_options_model(canvas):
     c = canvas
 
     def is_vector():
+        sel = c.selection()
+        if getattr(sel, "kind", None) == "image" or c.tool == "arrow" or \
+                getattr(sel, "tool", None) == "arrow":
+            return False
         return model.TOOLS.get(c.tool, {}).get("kind") == "vector" or \
-            (c.tool == "edit" and c.selection() is not None)
+            (c.tool == "edit" and sel is not None)
 
     def option(tool, name):
         return (lambda: c.tool_settings[tool][name],
@@ -111,8 +115,20 @@ def tool_options_model(canvas):
         return (lambda: int(round(c.current().get(name, model.DEFAULT_PROFILE[name]) * 100)),
                 lambda value: c.set_profile(name, value / 100.0))
 
+    def is_arrow():
+        sel = c.selection()
+        return c.tool == "arrow" or getattr(sel, "tool", None) == "arrow"
+
+    def arrow(name):
+        def get():
+            return c.current().get(name, model.DEFAULT_ARROW[name])
+        return get, (lambda value: c.set_param(name, value))
+
     def hint():
         tool = c.tool
+        if tool == "arrow":
+            return tr("Straight: drag from the tail to the tip. Curved: draw freely or "
+                      "click points, as with the spline.")
         if tool == "line":
             return tr("Drag from one end to the other. Shift: angle in 15° steps.")
         if tool == "spline":
@@ -132,6 +148,19 @@ def tool_options_model(canvas):
         Param("spline_mode", tr("Spline input:"), "choice", *option("spline", "mode"),
               options=[("freehand", tr("Freehand, smoothed")), ("points", tr("Control points"))],
               visible=lambda: c.tool == "spline"),
+        Param("arrow_mode", tr("Arrow shape:"), "choice", *option("arrow", "mode"),
+              options=[("straight", tr("Straight")), ("freehand", tr("Curved, freehand")),
+                       ("points", tr("Curved, control points"))],
+              visible=lambda: c.tool == "arrow"),
+        Param("head_end", tr("Head at the end"), "bool", *arrow("head_end"), visible=is_arrow),
+        Param("head_start", tr("Head at the start"), "bool", *arrow("head_start"),
+              visible=is_arrow),
+        Param("head_style", tr("Head:"), "choice", *arrow("head_style"),
+              options=[("open", tr("Open")), ("filled", tr("Filled")), ("dot", tr("Dot"))],
+              visible=is_arrow),
+        Param("head_size", tr("Head size:"), "number", *arrow("head_size"), min=0, max=50,
+              step=0.5, decimals=1, unit="mm", tip=tr("0: from the stroke width"),
+              visible=is_arrow),
         Param("eraser_mode", tr("Eraser:"), "choice", *option("eraser", "mode"),
               options=[("soft", tr("Soft (pixels)")), ("strokes", tr("Whole strokes"))],
               visible=lambda: c.tool == "eraser"),

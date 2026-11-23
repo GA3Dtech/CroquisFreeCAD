@@ -200,3 +200,26 @@ def test_gui_functions_refuse_headless(doc, sheet):
     with pytest.raises(errors.GuiRequiredError):
         api.restore_image_view(sheet["name"], "img1", doc=doc)
     assert api.describe()["functions"]["capture_3d_view"]["gui"] is True
+
+
+def test_add_arrow(doc, sheet):
+    n = sheet["name"]
+    api.add_arrow(n, [[20, 100], [150, 40]], doc=doc)
+    api.add_arrow(n, [[20, 20], [80, 60], [180, 30]], curved=True, head_start=True,
+                  style="filled", width_mm=1.2, head_size_mm=5, color="#c03030", doc=doc)
+    a, b = api.list_strokes(n, doc=doc)
+    assert a["tool"] == b["tool"] == "arrow"
+    assert len(a["bezier"]) == 4 and a["heads"] == {"start": False, "end": True,
+                                                     "style": "open", "size": 0.0}
+    assert len(b["bezier"]) == 7 and b["heads"]["start"] and b["heads"]["style"] == "filled"
+    assert b["heads"]["size"] == 5 and b["color"] == "#c03030"
+    for bad in (dict(points=[[0, 0]]), dict(points=[[0, 0], [1, 1], [2, 2]]),
+                dict(points=[[0, 0], [5, 5]], style="star")):
+        with pytest.raises(errors.InvalidStrokeError):
+            api.add_arrow(n, doc=doc, **bad)
+    with pytest.raises(errors.InvalidStrokeError):
+        api.add_strokes(n, [{"tool": "line", "points": [[0, 0], [1, 1]],
+                             "heads": {"end": True}}], doc=doc)
+    with pytest.raises(errors.InvalidStrokeError):
+        api.add_strokes(n, [{"tool": "arrow", "points": [[0, 0], [1, 1]],
+                             "heads": {"end": "yes"}}], doc=doc)

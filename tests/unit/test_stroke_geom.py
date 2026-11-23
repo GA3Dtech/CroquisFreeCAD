@@ -176,3 +176,34 @@ def test_distance_to_polyline():
     assert g.distance_to_polyline([], 0, 0) == float("inf")
     assert g.distance_to_polyline([(1, 1)], 4, 5) == pytest.approx(5)
     assert g.distance_to_polyline([(1, 1), (1, 1)], 1, 2) == pytest.approx(1)
+
+
+# ----------------------------------------------------------------------
+#  Arrow heads
+# ----------------------------------------------------------------------
+def test_chain_end_direction():
+    chain = g.line_chain(0, 0, 10, 0)
+    assert g.chain_end_direction(chain, True) == pytest.approx((1, 0))
+    assert g.chain_end_direction(chain, False) == pytest.approx((-1, 0))
+    curved = g.anchors_to_chain([(0, 0), (10, 10), (20, 0)])
+    dx, dy = g.chain_end_direction(curved, True)
+    assert dx > 0 and dy < 0                     # arriving downwards-right... (y down)
+    assert g.chain_end_direction([(1, 1), (1, 1)], True) == (1.0, 0.0)
+
+
+@pytest.mark.parametrize("direction", [(1, 0), (0, 1), (-0.6, 0.8)])
+def test_arrow_head_open_and_filled(direction):
+    tip = (50.0, 20.0)
+    kind, (left, t, right) = g.arrow_head(tip, direction, 6.0, "open")
+    assert kind == "lines" and t == tip
+    for p in (left, right):
+        assert math.hypot(p[0] - tip[0], p[1] - tip[1]) == pytest.approx(6.0)
+        # the barbs point back along the direction
+        assert (p[0] - tip[0]) * direction[0] + (p[1] - tip[1]) * direction[1] < 0
+    mid = ((left[0] + right[0]) / 2 - tip[0], (left[1] + right[1]) / 2 - tip[1])
+    n = math.hypot(*mid)
+    assert (mid[0] / n, mid[1] / n) == pytest.approx((-direction[0], -direction[1]), abs=1e-9)
+    kind, poly = g.arrow_head(tip, direction, 6.0, "filled")
+    assert kind == "polygon" and poly[0] == tip and len(poly) == 3
+    kind, (centre, radius) = g.arrow_head(tip, direction, 6.0, "dot")
+    assert kind == "dot" and centre == tip and radius == pytest.approx(2.0)

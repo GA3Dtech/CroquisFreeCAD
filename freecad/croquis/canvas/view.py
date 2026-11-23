@@ -53,6 +53,7 @@ BOARD_TOOLS = [
     ("highlight", "Highlight.svg", QtCore.Qt.Key_W),
     ("line", "Line.svg", QtCore.Qt.Key_L),
     ("spline", "Spline.svg", QtCore.Qt.Key_S),
+    ("arrow", "Arrow.svg", QtCore.Qt.Key_A),
     ("eraser", "Eraser.svg", QtCore.Qt.Key_E),
     ("edit", "EditStroke.svg", QtCore.Qt.Key_V),
 ]
@@ -99,6 +100,8 @@ def default_settings():
             st.update(model.DEFAULT_PROFILE)
         out[k] = st
     out["line"]["tin"] = 0.6
+    out["arrow"].update(model.DEFAULT_ARROW)
+    out["arrow"]["mode"] = "straight"
     out["spline"]["mode"] = "freehand"
     out["eraser"]["mode"] = "soft"
     out["eraser"]["target"] = model.ALL_LAYERS
@@ -258,7 +261,7 @@ class SheetCanvas(QtWidgets.QWidget):
             return
         if sel is not None:
             new = sel.copy()
-            if name in model.DEFAULT_PROFILE:
+            if name in model.DEFAULT_PROFILE or name in model.DEFAULT_ARROW:
                 new.params[name] = value
             else:
                 setattr(new, name, value)
@@ -281,6 +284,10 @@ class SheetCanvas(QtWidgets.QWidget):
 
     def set_profile(self, name, value):
         self._set(name, float(value))
+
+    def set_param(self, name, value):
+        """Stroke parameter that is not a number (arrow heads...)."""
+        self._set(name, value)
 
     def set_option(self, name, value):
         """Tool option that is not a stroke property (spline mode, eraser

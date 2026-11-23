@@ -94,7 +94,8 @@ class Tool(object):
         t = model.TOOLS[self.name]
         params = None
         if t["kind"] == "vector":
-            params = dict((k, st[k]) for k in model.DEFAULT_PROFILE)
+            keys = model.DEFAULT_ARROW if self.name == "arrow" else model.DEFAULT_PROFILE
+            params = dict((k, st[k]) for k in keys)
         layer = st.get("target", t["layer"]) if t["kind"] == "eraser" else t["layer"]
         return model.Stroke(self.name, st["color"], st["size"], st["opacity"], layer,
                             points or [], params)
@@ -414,7 +415,8 @@ class SplineTool(Tool):
 
     @property
     def mode(self):
-        return self.settings.get("mode", "freehand")
+        mode = self.settings.get("mode", "freehand")
+        return "freehand" if mode == "straight" else mode
 
     # --- freehand
     def press(self, pos, pressure, mods):
@@ -843,7 +845,9 @@ def make_tool(canvas, key):
         return EditTool(canvas, key)
     kind = model.tool_kind(key)
     if kind == "vector":
-        return LineTool(canvas, key) if key == "line" else SplineTool(canvas, key)
+        straight = key == "line" or (key == "arrow" and
+                                     canvas.tool_settings[key].get("mode") == "straight")
+        return LineTool(canvas, key) if straight else SplineTool(canvas, key)
     if kind == "eraser" and canvas.tool_settings[key].get("mode") == "strokes":
         return StrokeEraserTool(canvas, key)
     return BrushTool(canvas, key)

@@ -35,6 +35,7 @@ from freecad.croquis import api
 | `get_sheet(sheet, doc=None)` | metadata: name, label, format, size in mm, dpi, paper, plane, image plane name, stroke counts, layers |
 | `list_strokes(sheet, layer=None, doc=None)` | strokes in drawing order (stroke format + `index`, `kind`) |
 | `add_strokes(sheet, strokes, doc=None)` | `{"indices": [...], "sheet": metadata}` — all strokes are validated before anything changes |
+| `add_arrow(sheet, points, curved=False, head_start=False, head_end=True, style="open", width_mm=0.8, color="#1b1b1d", layer="lines", head_size_mm=0.0, opacity=1.0, doc=None)` | like `add_strokes` — tail at `points[0]`, tip at `points[-1]`; straight with 2 points, a smooth curve through all points when `curved` |
 | `delete_strokes(sheet, indices, doc=None)` | metadata |
 | `set_layer(sheet, layer, visible=None, opacity=None, doc=None)` | metadata |
 | `set_paper(sheet, paper, doc=None)` | metadata |
@@ -58,12 +59,15 @@ construction marker lines highlights`; strokes go on `construction`,
 ## Stroke format
 
 ```json
-{"tool": "pencil | grease | marker | highlight | eraser | line | spline",
+{"tool": "pencil | grease | marker | highlight | eraser | line | spline | arrow",
  "points": [[x, y, pressure], ...],
  "bezier": [[x, y], ...],
  "color": "#rrggbb", "size": 1.2, "opacity": 0.9, "layer": "lines",
- "profile": {"peak": 0.45, "tin": 1.0, "tout": 1.0}}
+ "profile": {"peak": 0.45, "tin": 1.0, "tout": 1.0},
+ "heads": {"start": false, "end": true, "style": "open | filled | dot", "size": 0}}
 ```
+
+`heads` is for arrows only (`size` in mm, 0 = from the width).
 
 - Raster tools and the eraser: `points` in mm, pressure 0..1 (optional,
   default 1). The eraser's `layer` is `"*"` (all layers, default) or one

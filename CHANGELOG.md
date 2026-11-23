@@ -46,6 +46,9 @@ All notable changes to this project are documented here. The format follows
   view, never the board, with the sheets hidden, onto a new sheet shaped
   like the view or onto the open board; the camera is kept with the picture
   ("Back to this view"). Shared capture code in `capture.py`.
+- Arrow tool (`A`): straight or curved vector arrows, heads at the start
+  and / or end (open, filled, dot, size), editable with the edit tool.
+- API 1.3: `add_arrow`; strokes accept `"heads"` for arrows.
 - API 1.2: `capture_3d_view`, `restore_image_view` (GUI only).
 - API 1.1: `add_image`, `new_sheet_from_image`, `list_images`,
   `update_image_element`, `delete_image_element`; `create_sheet` accepts

@@ -128,3 +128,24 @@ def documents():
     docs["planes"] = [sheet("plane_%s" % p, "A5L", 72, "transparent", p,
                             strokes=basic_strokes(210, 148)) for p in PLANES]
     return docs
+
+
+def annotation_documents():
+    """Sheets using format v2 features (not part of the frozen v0.2.0 set)."""
+    arrows = []
+    for i, style in enumerate(("open", "filled", "dot")):
+        y = 30 + 40 * i
+        arrows.append({"t": "arrow", "c": "#1b1b1d", "s": 0.8 + 0.4 * i, "o": 1.0, "l": "lines",
+                       "p": _flat([(x, y, 1.0) for x, y in line_chain(20, y, 120, y - 15)]),
+                       "q": {"head_end": True, "head_start": i == 1, "head_style": style,
+                             "head_size": 0.0, "peak": 0.5, "tin": 0.0, "tout": 0.0}})
+    arrows.append({"t": "arrow", "c": "#c03030", "s": 1.0, "o": 1.0, "l": "lines",
+                   "p": _flat([(x, y, 1.0) for x, y in anchors_chain(
+                       [(140, 130), (160, 60), (195, 40)])]),
+                   "q": {"head_end": True, "head_start": False, "head_style": "filled",
+                         "head_size": 6.0, "peak": 0.5, "tin": 0.0, "tout": 0.0}})
+    s = sheet("arrows", "A5L", 150, "white", strokes=arrows)
+    s["data"]["version"] = 2
+    s["data"]["elements"] = []
+    s["data"]["layers"]["images"] = {"opacity": 1.0, "visible": True}
+    return {"annotations": [s]}

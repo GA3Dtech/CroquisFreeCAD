@@ -33,7 +33,8 @@ Version 0.2.
 | Sheet stored in the document, linked image plane on XY / XZ / YZ, PNG export | done |
 | Pictures pasted (Ctrl+V), dropped or inserted, new sheet from the clipboard; move, resize, rotate, opacity, stacking | done (v0.3) |
 | Manual 3D view capture onto a new sheet or the open board, camera kept ("Back to this view") | done (v0.3) |
-| 3D view underlay (plane and camera), arrows, text and callouts | v0.3 |
+| Arrows: straight or curved, heads at the start / end, open / filled / dot | done (v0.3) |
+| 3D view underlay (plane and camera), text and callouts | v0.3 |
 | Ellipses, perspective grids | later |
 | SVG export, TechDraw, chisel tip, custom palettes | v0.4 |
 
@@ -76,6 +77,7 @@ picture.
 | `W` | White highlight | Highlights | For reflections, best on tinted paper. |
 | `L` | Straight line | Lines | Tapered vector line, drag from end to end; `Shift` snaps to 15°. |
 | `S` | Spline stroke | Lines | Thin, wide in the middle, pointed. *Freehand* is smoothed into Bezier curves; *Control points*: click the points, click the last one again (or double-click, `Enter`, right-click) to finish, `Backspace` removes the last point, `Esc` cancels. |
+| `A` | Arrow | Lines | Straight (drag tail to tip, `Shift` 15°) or curved (freehand or control points); heads at the end and / or start, open, filled or dot; editable with `V`. |
 | `E` | Eraser | All or one | *Soft* removes pixels; *Whole strokes* deletes every stroke it touches. |
 | `V` | Edit vector strokes | – | Click a line or spline: drag its anchors, handles or the whole stroke; colour, size, opacity and width profile apply to it; `Delete` removes it. |
 

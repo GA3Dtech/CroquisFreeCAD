@@ -409,3 +409,37 @@ def _reparameterize(d, first, last, u, bez):
         den = _dot(q1, q1) + _dot(diff, q2)
         out.append(clamp(t - _dot(diff, q1) / den) if abs(den) > 1e-12 else t)
     return out
+
+
+# ----------------------------------------------------------------------
+#  Arrow heads
+# ----------------------------------------------------------------------
+def chain_end_direction(chain, at_end=True):
+    """Unit direction of a Bezier chain leaving its start (at_end=False,
+    pointing backwards, away from the curve) or arriving at its end."""
+    pts = chain if at_end else list(reversed(chain))
+    tip = pts[-1]
+    for p in reversed(pts[:-1]):
+        dx, dy = tip[0] - p[0], tip[1] - p[1]
+        d = math.hypot(dx, dy)
+        if d > 1e-9:
+            return dx / d, dy / d
+    return 1.0, 0.0
+
+
+def arrow_head(tip, direction, length, style="open", spread_deg=24.0):
+    """Geometry of an arrow head at `tip` pointing along `direction`:
+    ("lines", [left, tip, right]) for open heads, ("polygon", [tip, left,
+    right]) for filled ones, ("dot", (centre, radius))."""
+    ux, uy = direction
+    if style == "dot":
+        return "dot", ((tip[0], tip[1]), length / 3.0)
+    a = math.radians(spread_deg)
+    ca, sa = math.cos(a), math.sin(a)
+    # the two barbs: direction reversed, turned by +/- spread
+    bx, by = -ux, -uy
+    left = (tip[0] + length * (bx * ca - by * sa), tip[1] + length * (bx * sa + by * ca))
+    right = (tip[0] + length * (bx * ca + by * sa), tip[1] + length * (-bx * sa + by * ca))
+    if style == "filled":
+        return "polygon", [tuple(tip[:2]), left, right]
+    return "lines", [left, tuple(tip[:2]), right]

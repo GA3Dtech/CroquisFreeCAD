@@ -154,6 +154,23 @@ def test_mm_to_pixel(dpi):
     assert abs(cx - 37.0 * dpi / 25.4) <= 1.0 and abs(cy - 21.0 * dpi / 25.4) <= 1.0
 
 
+def test_arrow_head_at_the_tip():
+    sheet = model.SheetData(100, 60, 150, "transparent")
+    sheet.strokes = [model.Stroke("arrow", "#000000", 0.8, 1.0, "lines",
+                                  [(10, 30, 1), (40, 30, 1), (60, 30, 1), (80, 30, 1)],
+                                  {"head_style": "open", "head_size": 8.0})]
+    arr = render(sheet)
+
+    def alpha(x, y):
+        X, Y = px(sheet, x, y)
+        return arr[Y, X, 3]
+    # barbs behind the tip, above and below the shaft; nothing beyond the tip
+    assert alpha(80 - 7.3 * 0.95, 30 - 3.25 * 0.95) > 100
+    assert alpha(80 - 7.3 * 0.95, 30 + 3.25 * 0.95) > 100
+    assert alpha(85, 30) == 0
+    assert alpha(15, 25) == 0                     # no head at the start
+
+
 def test_unknown_tool_not_drawn():
     sheet = model.SheetData(50, 50, 72, "transparent")
     s = stroke("pencil", [(10, 10, 1), (40, 40, 1)])
@@ -166,7 +183,9 @@ def test_unknown_tool_not_drawn():
 #  Reference images
 # ----------------------------------------------------------------------
 def spec_sheets():
-    return [s for _doc, sheets in specs.documents().items() for s in sheets]
+    docs = dict(specs.documents())
+    docs.update(specs.annotation_documents())
+    return [s for _doc, sheets in docs.items() for s in sheets]
 
 
 @pytest.mark.parametrize("spec", spec_sheets(), ids=[s["label"] for s in spec_sheets()])

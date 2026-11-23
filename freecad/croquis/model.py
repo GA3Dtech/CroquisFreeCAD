@@ -196,6 +196,18 @@ TOOLS = {
         "grain": 0.0,
         "grain_pressure": 0.0,
     },
+    "arrow": {
+        "label": N_("Arrow"),
+        "kind": "vector",
+        "layer": "lines",
+        "color": "#1b1b1d",
+        "size": 0.8,
+        "opacity": 1.0,
+        "pressure_width": 1.0,
+        "pressure_alpha": 0.0,
+        "grain": 0.0,
+        "grain_pressure": 0.0,
+    },
     "eraser": {
         "label": N_("Eraser"),
         "kind": "eraser",
@@ -209,12 +221,23 @@ TOOLS = {
         "grain_pressure": 0.0,
     },
 }
-TOOL_KEYS = ["pencil", "grease", "marker", "highlight", "line", "spline", "eraser"]
+TOOL_KEYS = ["pencil", "grease", "marker", "highlight", "line", "spline", "arrow", "eraser"]
 
 # Width profile of vector strokes (stroke.params):
 #   peak: position of the widest point along the stroke (0..1)
 #   tin / tout: taper at the start / end (0 = blunt, 1 = pointed)
 DEFAULT_PROFILE = {"peak": 0.45, "tin": 1.0, "tout": 1.0}
+
+# Arrow heads (params of "arrow" strokes): at the start / end, style
+# open / filled / dot, size in mm (0 = from the stroke width)
+ARROW_STYLES = ["open", "filled", "dot"]
+DEFAULT_ARROW = {"head_start": False, "head_end": True, "head_style": "open",
+                 "head_size": 0.0, "peak": 0.5, "tin": 0.0, "tout": 0.0}
+
+
+def arrow_head_size(size, head_size):
+    """Head length in mm: given, or from the stroke width."""
+    return head_size if head_size and head_size > 0 else 2.5 + 4.0 * size
 
 
 def tool_kind(tool):
@@ -426,7 +449,7 @@ class Stroke(object):
         return s
 
     def profile(self):
-        p = dict(DEFAULT_PROFILE)
+        p = dict(DEFAULT_ARROW if self.tool == "arrow" else DEFAULT_PROFILE)
         p.update(self.params)
         return p
 
@@ -437,6 +460,8 @@ class Stroke(object):
         xs = [p[0] for p in self.points]
         ys = [p[1] for p in self.points]
         m = self.size
+        if self.tool == "arrow":
+            m += arrow_head_size(self.size, self.profile()["head_size"])
         return min(xs) - m, min(ys) - m, max(xs) + m, max(ys) + m
 
     def to_dict(self):

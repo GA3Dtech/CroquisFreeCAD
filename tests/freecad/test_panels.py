@@ -58,6 +58,10 @@ class FakeCanvas(object):
         self.tool_settings[self.tool][name] = value
         self.calls.append(("profile", name, value))
 
+    def set_param(self, name, value):
+        self.tool_settings[self.tool][name] = value
+        self.calls.append(("param", name, value))
+
 
 def test_tool_options_follow_the_tool():
     pytest.importorskip("FreeCAD")
@@ -68,15 +72,20 @@ def test_tool_options_follow_the_tool():
     m = panels.tool_options_model(c)
     assert m.values()["tout"] == 100 and m.error == ""     # raster tool: defaults shown
     vector = ["peak", "tin", "tout"]
-    assert set(m.hidden()) == {"spline_mode", "eraser_mode", "eraser_target"} | set(vector)
+    arrow = {"arrow_mode", "head_end", "head_start", "head_style", "head_size"}
+    assert set(m.hidden()) == {"spline_mode", "eraser_mode", "eraser_target"} | set(vector) \
+        | arrow
     c.tool = "spline"
-    assert set(m.hidden()) == {"eraser_mode", "eraser_target"}
+    assert set(m.hidden()) == {"eraser_mode", "eraser_target"} | arrow
     assert m.set("spline_mode", "points") and c.calls[-1] == ("option", "mode", "points")
     assert m.set("tin", 30) and c.calls[-1] == ("profile", "tin", 0.3)
     assert m.values()["tin"] == 30
     assert "points" in m.hint_text().lower() or "point" in m.hint_text().lower()
+    c.tool = "arrow"
+    assert set(m.hidden()) == {"spline_mode", "eraser_mode", "eraser_target"} | set(vector)
+    assert m.set("head_style", "filled") and c.calls[-1] == ("param", "head_style", "filled")
     c.tool = "eraser"
-    assert set(m.hidden()) == {"spline_mode"} | set(vector)
+    assert set(m.hidden()) == {"spline_mode"} | set(vector) | arrow
     assert m.set("eraser_target", "marker")
     assert not m.set("eraser_target", "underlay")
     assert c.tool_settings["eraser"]["target"] == "marker"

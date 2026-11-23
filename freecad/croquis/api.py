@@ -40,7 +40,7 @@ Contract:
 
 Stroke format of add_strokes() / list_strokes():
     {"tool": "pencil" | "grease" | "marker" | "highlight" | "eraser"
-             | "line" | "spline",
+             | "line" | "spline" | "arrow",
      "points": [[x, y, pressure], ...]   raster tools and eraser (mm, 0..1;
                                          pressure optional, default 1)
                [[x, y], ...]             line / spline: points the curve goes
@@ -49,7 +49,9 @@ Stroke format of add_strokes() / list_strokes():
                                          Bezier chain P0 C1 C2 P1 ... (3n + 1)
      "color": "#rrggbb", "size": mm (max width for line / spline),
      "opacity": 0..1, "layer": layer key ("*" = all layers, eraser only),
-     "profile": {"peak": 0..1, "tin": 0..1, "tout": 0..1}  line / spline}
+     "profile": {"peak": 0..1, "tin": 0..1, "tout": 0..1}  line / spline / arrow
+     "heads": {"start": bool, "end": bool, "style": "open" | "filled" | "dot",
+               "size": mm (0 = from the width)}                arrow only}
 Missing optional fields take the tool defaults (model.TOOLS).
 """
 
@@ -70,7 +72,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.2.0"
+API_VERSION = "1.3.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -184,7 +186,11 @@ def _sheet_info(obj):
 def _stroke_out(index, s):
     if s.kind == "vector":
         pts = [[round(p[0], 3), round(p[1], 3)] for p in s.points]
-        geom = {"bezier": pts, "profile": s.profile()}
+        prof = s.profile()
+        geom = {"bezier": pts, "profile": dict((k, prof[k]) for k in model.DEFAULT_PROFILE)}
+        if s.tool == "arrow":
+            geom["heads"] = {"start": prof["head_start"], "end": prof["head_end"],
+                             "style": prof["head_style"], "size": prof["head_size"]}
     else:
         geom = {"points": [[round(p[0], 3), round(p[1], 3), round(p[2], 3)] for p in s.points]}
     d = {"index": index, "tool": s.tool, "kind": s.kind, "color": s.color,
@@ -205,12 +211,39 @@ def _point(p, i, with_pressure):
     return (x, y, pr) if with_pressure else (x, y)
 
 
+def _heads(h):
+    """Arrow head params from the API form {"start", "end", "style", "size"}."""
+    if not isinstance(h, dict) or set(h) - {"start", "end", "style", "size"}:
+        raise InvalidStrokeError("heads keys are start, end, style, size; got %r" % (h,))
+    out = {"head_start": model.DEFAULT_ARROW["head_start"],
+           "head_end": model.DEFAULT_ARROW["head_end"],
+           "head_style": model.DEFAULT_ARROW["head_style"],
+           "head_size": model.DEFAULT_ARROW["head_size"]}
+    for key in ("start", "end"):
+        if key in h:
+            if not isinstance(h[key], bool):
+                raise InvalidStrokeError("heads.%s must be True or False" % key)
+            out["head_" + key] = h[key]
+    if "style" in h:
+        if h["style"] not in model.ARROW_STYLES:
+            raise InvalidStrokeError("heads.style must be one of %s, got %r"
+                                     % (", ".join(model.ARROW_STYLES), h["style"]))
+        out["head_style"] = h["style"]
+    if "size" in h:
+        try:
+            out["head_size"] = _num(h["size"], "heads.size", 0.0, 100.0)
+        except InvalidArgumentError as exc:
+            raise InvalidStrokeError(str(exc))
+    return out
+
+
 def stroke_from_dict(d):
     """model.Stroke from the API stroke format (strict validation)."""
     from .render import stroke_geom as geom
     if not isinstance(d, dict):
         raise InvalidStrokeError("a stroke must be a dict, got %r" % (d,))
-    known = {"tool", "points", "bezier", "color", "size", "opacity", "layer", "profile"}
+    known = {"tool", "points", "bezier", "color", "size", "opacity", "layer", "profile",
+             "heads"}
     extra = set(d) - known
     if extra:
         raise InvalidStrokeError("unknown stroke field(s): %s" % ", ".join(sorted(extra)))
@@ -250,10 +283,12 @@ def stroke_from_dict(d):
                 raise InvalidStrokeError("a %s stroke needs at least 2 points" % tool)
             if tool == "line" and len(anchors) != 2:
                 raise InvalidStrokeError("a line has exactly 2 points, got %d" % len(anchors))
-            chain = geom.line_chain(*(anchors[0] + anchors[1])) if tool == "line" \
+            straight = tool == "line" or (tool == "arrow" and len(anchors) == 2)
+            chain = geom.line_chain(*(anchors[0] + anchors[1])) if straight \
                 else geom.anchors_to_chain(anchors)
         pts = [(x, y, 1.0) for x, y in chain]
-        prof = dict(model.DEFAULT_PROFILE)
+        prof = dict(model.DEFAULT_PROFILE if tool != "arrow" else
+                    dict((k, model.DEFAULT_ARROW[k]) for k in model.DEFAULT_PROFILE))
         given = d.get("profile", {})
         if not isinstance(given, dict) or set(given) - set(prof):
             raise InvalidStrokeError("profile keys are peak, tin, tout; got %r" % (given,))
@@ -263,9 +298,14 @@ def stroke_from_dict(d):
         except InvalidArgumentError as exc:
             raise InvalidStrokeError(str(exc))
         params = prof
+        if tool == "arrow":
+            params.update(_heads(d.get("heads", {})))
+        elif "heads" in d:
+            raise InvalidStrokeError("'heads' is for arrow strokes")
     else:
-        if "bezier" in d or "profile" in d:
-            raise InvalidStrokeError("'bezier' and 'profile' are for line / spline strokes")
+        if "bezier" in d or "profile" in d or "heads" in d:
+            raise InvalidStrokeError("'bezier', 'profile' and 'heads' are for line / spline / "
+                                     "arrow strokes")
         raw = d.get("points")
         if not isinstance(raw, (list, tuple)) or not raw:
             raise InvalidStrokeError("'points' must be a non-empty list")
@@ -405,6 +445,24 @@ def add_strokes(sheet, strokes, doc=None):
     obj = _sheet(sheet, doc)
     indices = _edit(obj, None, tr("Edit sketch sheet"), change)
     return {"indices": indices, "sheet": _sheet_info(obj)}
+
+
+def add_arrow(sheet, points, curved=False, head_start=False, head_end=True, style="open",
+              width_mm=0.8, color="#1b1b1d", layer="lines", head_size_mm=0.0, opacity=1.0,
+              doc=None):
+    """Arrow from points[0] (tail) to points[-1] (tip): straight between two
+    points, or a smooth curve through all the points when curved. Heads at
+    the start and / or the end, style open / filled / dot, size in mm (0:
+    from the width). Returns {"indices": [...], "sheet": metadata}."""
+    if not isinstance(points, (list, tuple)) or len(points) < 2:
+        raise InvalidStrokeError("an arrow needs at least 2 points")
+    if not curved and len(points) != 2:
+        raise InvalidStrokeError("a straight arrow has exactly 2 points (use curved=True)")
+    stroke = {"tool": "arrow", "points": [list(p)[:2] for p in points], "size": width_mm,
+              "color": color, "layer": layer, "opacity": opacity,
+              "heads": {"start": head_start, "end": head_end, "style": style,
+                        "size": head_size_mm}}
+    return add_strokes(sheet, [stroke], doc=doc)
 
 
 def delete_strokes(sheet, indices, doc=None):
@@ -714,9 +772,10 @@ def export_png(sheet, path, dpi=None, doc=None):
 #  Introspection
 # ----------------------------------------------------------------------
 PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper", "set_layer",
-          "list_strokes", "add_strokes", "delete_strokes", "add_image", "new_sheet_from_image",
-          "list_images", "update_image_element", "delete_image_element", "capture_3d_view",
-          "restore_image_view", "render_png", "export_png", "describe"]
+          "list_strokes", "add_strokes", "add_arrow", "delete_strokes", "add_image",
+          "new_sheet_from_image", "list_images", "update_image_element",
+          "delete_image_element", "capture_3d_view", "restore_image_view", "render_png",
+          "export_png", "describe"]
 
 GUI_ONLY = ["capture_3d_view", "restore_image_view"]
 

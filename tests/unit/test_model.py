@@ -232,3 +232,16 @@ def test_palettes():
     for _name, colors in pals:
         for _label, c in colors:
             assert c.startswith("#") and len(c) == 7
+
+
+def test_arrow_stroke_params_and_bounds():
+    s = model.Stroke("arrow", "#000000", 1.0, 1, "lines",
+                     [(0, 0, 1), (3, 0, 1), (6, 0, 1), (10, 0, 1)],
+                     {"head_start": True, "head_style": "filled"})
+    prof = s.profile()
+    assert prof["head_start"] and prof["head_end"] and prof["head_style"] == "filled"
+    assert prof["tin"] == 0.0                    # arrows: constant width by default
+    head = model.arrow_head_size(1.0, 0)
+    assert s.bounds()[2] == pytest.approx(10 + 1.0 + head)
+    again = model.Stroke.from_dict(s.to_dict())
+    assert again.profile() == prof

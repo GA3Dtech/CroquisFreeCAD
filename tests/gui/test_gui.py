@@ -121,7 +121,7 @@ def board(doc, croquis_wb, monkeypatch):
 
 
 TOOL_KEYS = [("pencil", "P"), ("grease", "G"), ("marker", "M"), ("highlight", "W"),
-             ("line", "L"), ("spline", "S"), ("eraser", "E")]
+             ("line", "L"), ("spline", "S"), ("arrow", "A"), ("eraser", "E")]
 
 
 @pytest.mark.parametrize("tool,letter", TOOL_KEYS)
@@ -139,6 +139,22 @@ def test_each_tool_draws_its_stroke(board, tool, letter):
     drag(c, pts)
     assert len(c.sheet.strokes) == before + 1
     assert c.sheet.strokes[-1].tool == tool
+
+
+def test_arrow_options(board):
+    _obj, b = board
+    c = b.canvas
+    c.set_tool("arrow")
+    hidden = set(b.options_bridge.hidden)
+    assert {"arrow_mode", "head_end", "head_style"}.isdisjoint(hidden)
+    assert "peak" in hidden
+    b.options_bridge.setValue("head_style", "dot")
+    b.options_bridge.setValue("arrow_mode", "freehand")
+    w = c.sheet_rect_widget()
+    drag(c, [(w.x() + 60 + 8 * i, w.y() + 80 + 3 * i) for i in range(25)])
+    s = c.sheet.strokes[-1]
+    assert s.tool == "arrow" and s.profile()["head_style"] == "dot"
+    assert len(s.points) >= 4                     # fitted Bezier chain
 
 
 def test_undo_redo_keys(board):
