@@ -79,6 +79,13 @@ All notable changes to this project are documented here. The format follows
   in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.
 
 ### Changed
+- Supported FreeCAD versions: 1.1.x, 26.3 and 27.1 (development); 1.0 is
+  dropped (`freecadmin` 1.1.0). The CI tests 1.1.4, 26.3rc2 and a 27.1
+  weekly build.
+- Known limitation: a file saved WITHOUT the GUI (headless API, MCP
+  `execute_code_headless`) has no GUI data; FreeCAD 1.1 then opens its image
+  plane hidden when the addon is absent (26.3 and later show it). Files
+  saved from the GUI are not affected.
 - New sheets go into one "Croquis" group of the document instead of
   piling up at the root of the tree.
 - Sheet format version 2 (migration from v1 on read): new `images` layer
@@ -89,6 +96,8 @@ All notable changes to this project are documented here. The format follows
   the public API.
 
 ### Fixed
+- "Back to this view", captures and the 3D guide stop a running camera
+  animation first (with a real display the animation overwrote the camera).
 - Updating a sketch no longer resets the size of its image plane: a sheet
   has a `Scale` property (3D mm per sheet mm), and scaling the image plane
   by hand updates it instead of being undone (in the GUI, the image plane

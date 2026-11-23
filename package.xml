@@ -16,7 +16,7 @@
       <classname>CroquisWorkbench</classname>
       <subdirectory>./</subdirectory>
       <icon>freecad/croquis/resources/icons/Croquis.svg</icon>
-      <freecadmin>1.0.0</freecadmin>
+      <freecadmin>1.1.0</freecadmin>
       <tag>sketch</tag>
       <tag>drawing</tag>
       <tag>design</tag>

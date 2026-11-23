@@ -67,7 +67,17 @@ def camera_of(view):
             "orientation": [rot.Q[0], rot.Q[1], rot.Q[2], rot.Q[3]]}
 
 
+def stop_animation(view):
+    """A running camera animation (standard views, fit all) would overwrite
+    a camera set now: stop it first."""
+    try:
+        view.stopAnimating()
+    except Exception:
+        pass
+
+
 def restore_camera(view, camera):
+    stop_animation(view)
     view.setCamera(camera["inventor"])
 
 
@@ -151,6 +161,7 @@ def capture(doc, width=None, height=None, background="current", hide_sheets=True
     """(QImage, camera dict) of the document's 3D view. Default size: the
     view's own size times `factor`."""
     view = view_3d(doc)
+    stop_animation(view)        # capture the view where it ends, not mid-way
     if width is None or height is None:
         w, h = view_size(view)
         width, height = int(w * factor), int(h * factor)
@@ -244,6 +255,7 @@ def capture_plane(obj, data, style="edges", hide_sheets=True, max_px=3000):
     k = min(1.0, float(max_px) / max(w_px, h_px))
     w_px, h_px = max(16, int(round(w_px * k))), max(16, int(round(h_px * k)))
     hidden = sheet_planes(doc) if hide_sheets else [obj.ImagePlane]
+    stop_animation(view)
     user = view.getCamera()
     try:
         with HiddenObjects(hidden), DrawStyle(doc, style):

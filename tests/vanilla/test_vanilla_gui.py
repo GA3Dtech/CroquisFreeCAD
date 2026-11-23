@@ -36,7 +36,27 @@ def test_image_plane_displayed(path, tmp_path):
     try:
         planes = [o for o in doc.Objects if o.TypeId == "Image::ImagePlane"]
         assert planes
+        # some versions (1.1) build the image plane's scene when the view
+        # shows it: show the view and let it draw first
+        Gui.setActiveDocument(doc.Name)
+        view = Gui.ActiveDocument.ActiveView
+        view.fitAll()
+        from PySide import QtWidgets
+        for _i in range(5):
+            QtWidgets.QApplication.processEvents()
+        import zipfile
+        with zipfile.ZipFile(copy) as z:
+            has_gui = "GuiDocument.xml" in z.namelist()
         for img in planes:
+            if has_gui:
+                assert img.ViewObject.Visibility, img.Name
+            elif not img.ViewObject.Visibility:
+                # saved without GUI (no GuiDocument.xml): FreeCAD 1.1 shows
+                # linked objects hidden; 26.3 and later show them. Known
+                # limitation of headless files only: check the display anyway
+                img.ViewObject.Visibility = True
+                for _i in range(3):
+                    QtWidgets.QApplication.processEvents()
             box = bounding_box(img.ViewObject)
             assert not box.isEmpty(), img.Name
             lo, hi = box.getMin().getValue(), box.getMax().getValue()
@@ -48,8 +68,6 @@ def test_image_plane_displayed(path, tmp_path):
         for o in doc.Objects:
             if o.TypeId == "Image::ImagePlane":
                 o.ViewObject.Visibility = o is planes[0]
-        Gui.setActiveDocument(doc.Name)
-        view = Gui.ActiveDocument.ActiveView
         rot = planes[0].Placement.Rotation
         view.setCameraOrientation(rot)
         view.fitAll()

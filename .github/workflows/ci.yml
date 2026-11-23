@@ -3,9 +3,10 @@
 # FreeCAD integration, vanilla (no addon) and GUI smoke tests inside real
 # FreeCAD builds.
 #
-# FreeCAD versions are pinned. 1.0.2 is the last 1.0.x (Qt 5, Python 3.11).
-# No stable 26.x is published yet: 26.3rc2 (Qt 6) is the most recent 26.x
-# build; move to 26.3 when it is released.
+# Supported FreeCAD: 1.1.x, 26.3 and 27.1 (development). Versions are pinned:
+# 1.1.4 (last 1.1.x), 26.3rc2 (no stable 26.3 yet: move to it when it is
+# released), and a weekly development build for 27.1 (bump the tag from time
+# to time).
 name: CI
 
 on:
@@ -76,8 +77,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - freecad: "1.0.2"
+          - freecad: "1.1.4"
           - freecad: "26.3rc2"
+          - freecad: "weekly-2026.11.18"
     env:
       CROQUIS_WORK: ${{ github.workspace }}/work
       FREECAD_QT_QPA_PLATFORM: offscreen
@@ -118,8 +120,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - freecad: "1.0.2"
+          - freecad: "1.1.4"
           - freecad: "26.3rc2"
+          - freecad: "weekly-2026.11.18"
     env:
       CROQUIS_WORK: ${{ github.workspace }}/work
       FREECAD_QT_QPA_PLATFORM: xcb

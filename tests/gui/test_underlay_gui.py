@@ -23,9 +23,15 @@ CASES = {
 
 
 def camera_core(text):
-    """Camera text without the clipping planes FreeCAD recomputes itself."""
-    return [ln.strip() for ln in text.splitlines()
-            if ln.strip() and not ln.strip().startswith(("nearDistance", "farDistance"))]
+    """Numbers of the camera text without the clipping planes FreeCAD
+    recomputes itself, rounded (the text round trip is not exact)."""
+    import re
+    out = []
+    for ln in text.splitlines():
+        ln = ln.strip()
+        if ln and not ln.startswith(("nearDistance", "farDistance")):
+            out += [round(float(v), 4) for v in re.findall(r"-?\d+\.?\d*(?:e-?\d+)?", ln)]
+    return out
 
 
 def guide_array(doc, info):

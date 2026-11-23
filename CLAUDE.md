@@ -35,7 +35,7 @@ by a linked `Image::ImagePlane`. Read `README.md` first; the full design
 | `freecad/croquis/resources/palettes/` | Marker palettes (JSON) |
 | `tools/i18n.py` | Check / update the translation tables (Python and QML) |
 | `tests/` | Test suite, see *Testing*; `tests/fixtures/legacy/` frozen files (never regenerate) |
-| `.github/workflows/ci.yml` | CI: lint, unit, render, FreeCAD 1.0.2 / 26.3rc2 (integration, vanilla, GUI) |
+| `.github/workflows/ci.yml` | CI: lint, unit, render, FreeCAD 1.1.4 / 26.3rc2 / 27.1 dev (integration, vanilla, GUI) |
 
 The repository lives directly in the user's FreeCAD `Mod` folder
 (`~/.local/share/FreeCAD/v26-3/Mod/CroquisFreeCAD`): changes are live after a
@@ -66,7 +66,7 @@ FreeCAD restart.
   object may become inert there, but its `Image::ImagePlane` must keep
   showing the last render, exactly like an imported picture. Never store
   anything the image plane needs outside standard FreeCAD properties
-  (`tests/vanilla` checks it on FreeCAD 1.0 and 26.x).
+  (`tests/vanilla` checks it on FreeCAD 1.1, 26.3 and 27.1).
 - Sheet geometry is in **millimetres**; pixels only exist at render time
   (`SheetData.scale`). Never store pixel coordinates.
 - Marker rule: a stroke must not darken over itself, two strokes must. Each

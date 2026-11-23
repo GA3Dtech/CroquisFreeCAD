@@ -24,6 +24,7 @@ def scene(doc):
     view = capture.view_3d(doc)
     view.viewIsometric()
     view.fitAll()
+    capture.stop_animation(view)        # under xvfb the views animate
     process()
     return doc, view
 
@@ -80,6 +81,7 @@ def test_camera_restored(scene):
     before = view.getCameraOrientation()
     import re
     text = re.sub(r"orientation [^\n]*", "orientation 1 0 0 1.5707963", view.getCamera())
+    capture.stop_animation(view)
     view.setCamera(text)          # immediate (orientation changes are animated)
     process()
     assert not same_rotation(view.getCameraOrientation(), before)
@@ -110,6 +112,7 @@ def test_new_sheet_lies_on_the_captured_view(scene, camera_type):
     view.setCameraType(camera_type)
     view.viewIsometric()
     view.fitAll()
+    capture.stop_animation(view)
     process()
     res = api.capture_3d_view(doc, background="white")
     obj = doc.getObject(res["sheet"]["name"])

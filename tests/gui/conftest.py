@@ -10,6 +10,12 @@ if not App.GuiUp:
 
 import FreeCADGui as Gui  # noqa: E402
 
+# Camera animations (standard views, fit all) run on a timer with a real
+# display and would move the camera behind the tests' back: off in the
+# isolated test profile
+App.ParamGet("User parameter:BaseApp/Preferences/View").SetBool("UseNavigationAnimations",
+                                                                 False)
+
 
 def qt():
     from PySide import QtCore, QtGui, QtWidgets

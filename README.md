@@ -52,7 +52,7 @@ directory, then restart FreeCAD:
 git clone https://github.com/GA3Dtech/CroquisFreeCAD ~/.local/share/FreeCAD/v1-1/Mod/CroquisFreeCAD
 ```
 
-Requires FreeCAD 1.0 or newer (Qt5 or Qt6).
+Requires FreeCAD 1.1 or newer (tested on 1.1.x, 26.3 and the 27.1 development builds).
 
 ## Usage
 
@@ -127,7 +127,7 @@ tests/run_all.sh unit       # or render / freecad / vanilla / gui
 
 Unit and rendering tests run on plain Python (pytest, PySide6, numpy); the
 other levels run inside a FreeCAD AppImage (`FREECAD_APPIMAGE`). The CI runs
-them all on FreeCAD 1.0.2 and 26.3rc2, including a check that every file
+them all on FreeCAD 1.1.4, 26.3rc2 and a 27.1 development build, including a check that every file
 written by Croquis opens in a FreeCAD **without the addon**, its image plane
 intact.
 
