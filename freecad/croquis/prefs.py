@@ -40,6 +40,7 @@ DEFAULTS = {
     "PressureCurve": 1.0,           # exponent applied to tablet pressure
     "MouseSpeedPressure": True,     # mouse: fast stroke = thinner, lighter
     "Smoothing": 4,                 # input stabilizer, 0 = raw input
+    "UseQmlPanels": True,           # QML panels (else classic widgets)
 }
 
 
@@ -123,6 +124,11 @@ class PreferencePage(object):
         for code, name in LANGUAGES:
             self.language.addItem(name, code)
         f.addRow(tr("Language:"), self.language)
+        self.use_qml = QtWidgets.QCheckBox(tr("Use QML panels"))
+        self.use_qml.setToolTip(
+            tr("Off: every panel uses classic widgets (same functions). Useful when "
+               "Qt Quick is missing or draws badly on this system."))
+        f.addRow(self.use_qml)
         note = QtWidgets.QLabel(tr("Language changes apply after restarting FreeCAD."))
         note.setWordWrap(True)
         note.setStyleSheet("color: gray;")
@@ -166,6 +172,7 @@ class PreferencePage(object):
 
     def loadSettings(self):
         select_data(self.language, get("Language"))
+        self.use_qml.setChecked(get("UseQmlPanels"))
         select_data(self.fmt, get("SheetFormat"))
         select_data(self.dpi, get("SheetDpi"))
         select_data(self.paper, get("SheetPaper"))
@@ -176,6 +183,7 @@ class PreferencePage(object):
 
     def saveSettings(self):
         put("Language", self.language.currentData())
+        put("UseQmlPanels", self.use_qml.isChecked())
         put("SheetFormat", self.fmt.currentData())
         put("SheetDpi", self.dpi.currentData())
         put("SheetPaper", self.paper.currentData())

@@ -5,7 +5,8 @@
 tools/i18n.py (Croquis) - maintain the translation files.
 
 Reads every tr("...") and N_("...") call of the workbench sources (Python AST, no FreeCAD
-needed) and compares the texts with freecad/croquis/translations/*.json.
+needed) and every i18n.tr("...") call of the QML files (resources/qml), and
+compares the texts with freecad/croquis/translations/*.json.
 
     python3 tools/i18n.py check            # report missing / unused entries
     python3 tools/i18n.py update           # add missing entries (empty) to
@@ -21,6 +22,7 @@ Exit status of 'check' is 1 when something is missing (usable in CI).
 import ast
 import json
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -28,8 +30,30 @@ PKG = os.path.join(ROOT, "freecad", "croquis")
 TRANS = os.path.join(PKG, "translations")
 
 
+# QML: i18n.tr("...") with a plain string literal (double quotes)
+QML_TR = re.compile(r'i18n\.tr\(\s*"((?:[^"\\]|\\.)*)"\s*\)')
+
+
+def qml_texts(texts):
+    for dirpath, _dirs, files in os.walk(PKG):
+        for name in sorted(files):
+            if not name.endswith(".qml"):
+                continue
+            path = os.path.join(dirpath, name)
+            with open(path, "r", encoding="utf-8") as fh:
+                for lineno, line in enumerate(fh, 1):
+                    for m in QML_TR.finditer(line):
+                        text = json.loads('"%s"' % m.group(1))
+                        where = "%s:%d" % (os.path.relpath(path, ROOT), lineno)
+                        texts.setdefault(text, []).append(where)
+                    if "i18n.tr(" in line and not QML_TR.search(line):
+                        print("warning: i18n.tr() argument is not a literal at %s:%d"
+                              % (os.path.relpath(path, ROOT), lineno))
+
+
 def source_texts():
-    """{English text: [file:line, ...]} of every tr() call, in source order."""
+    """{English text: [file:line, ...]} of every tr() / N_() call of the
+    Python sources and every i18n.tr() call of the QML files."""
     texts = {}
     for dirpath, _dirs, files in os.walk(PKG):
         for name in sorted(files):
@@ -52,6 +76,7 @@ def source_texts():
                     texts.setdefault(arg.value, []).append(where)
                 else:
                     print("warning: tr() argument is not a literal at %s" % where)
+    qml_texts(texts)
     return texts
 
 
