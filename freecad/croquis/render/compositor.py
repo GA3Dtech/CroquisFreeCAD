@@ -58,9 +58,11 @@ class Compositor(object):
     """Layer caches and composite image of a sheet at a given resolution
     (pixels per mm, the sheet's own by default)."""
 
-    def __init__(self, sheet, scale=None, paper=True, export=False):
+    def __init__(self, sheet, scale=None, paper=True, export=False, underlay=None):
         self.sheet = sheet
         self.export = export
+        # the guide: shown on the board, left out of exports unless asked
+        self.show_underlay = (not export) if underlay is None else underlay
         self._pictures = {}     # path -> QImage
         self.scale = scale or sheet.scale
         self.paper = paper
@@ -69,8 +71,9 @@ class Compositor(object):
         self.bounds = QtCore.QRect(0, 0, self.w, self.h)
         self.layers = {}
         self.hidden = set()     # id() of strokes not painted
-        self.underlay = None    # QImage stretched over the sheet (v0.3)
+        self.underlay = None    # QImage of the 3D view guide (format v2)
         self.image = new_image(self.w, self.h)
+        self.load_underlay()
         self.rebuild()
 
     # --- layers
@@ -129,6 +132,16 @@ class Compositor(object):
                 painter.drawImage(pos, img, source_rect)
         finally:
             painter.end()
+
+    def load_underlay(self):
+        """The guide picture of the sheet (captured with the sheet's own
+        proportions, so it is stretched over the whole sheet)."""
+        self.underlay = None
+        path = self.sheet.files.get(model.SheetData.UNDERLAY_FILE) \
+            if self.sheet.underlay is not None else None
+        if path:
+            img = QtGui.QImage(path)
+            self.underlay = None if img.isNull() else img
 
     # --- images
     def picture(self, element):
@@ -247,7 +260,7 @@ class Compositor(object):
             color = model.paper_color(self.sheet.paper) if self.paper else None
             painter.fillRect(self.bounds, QtGui.QColor(color) if color
                              else QtGui.QColor(0, 0, 0, 0))
-            if self.underlay is not None and not self.export \
+            if self.underlay is not None and self.show_underlay \
                     and self.sheet.layers["underlay"]["visible"]:
                 painter.setCompositionMode(QtGui.QPainter.CompositionMode_SourceOver)
                 painter.setOpacity(self.sheet.layers["underlay"]["opacity"])
@@ -265,17 +278,19 @@ class Compositor(object):
         return rect
 
 
-def render_sheet(sheet, dpi=None, paper=True, export=True):
+def render_sheet(sheet, dpi=None, paper=True, export=True, underlay=False):
     """Final image of a sheet (QImage), at its own resolution or `dpi`.
-    export=True: as in the image plane (no guide, only rendered images)."""
-    comp = Compositor(sheet, scale=(dpi / 25.4) if dpi else None, paper=paper, export=export)
+    export=True: as in the image plane (no guide unless `underlay`, only
+    the images to render)."""
+    comp = Compositor(sheet, scale=(dpi / 25.4) if dpi else None, paper=paper, export=export,
+                      underlay=underlay or not export)
     return comp.image
 
 
-def save_png(sheet, path, dpi=None, paper=True, export=True):
+def save_png(sheet, path, dpi=None, paper=True, export=True, underlay=False):
     """Write the sheet as a PNG (alpha where the paper is transparent),
     with its resolution recorded in the file. Returns True on success."""
-    img = render_sheet(sheet, dpi, paper, export)
+    img = render_sheet(sheet, dpi, paper, export, underlay)
     dots_per_metre = int(round((dpi or sheet.dpi) / 0.0254))
     img.setDotsPerMeterX(dots_per_metre)
     img.setDotsPerMeterY(dots_per_metre)

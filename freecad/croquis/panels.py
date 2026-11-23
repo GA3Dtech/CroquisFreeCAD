@@ -25,6 +25,7 @@ hand twice. The models call api.py; they hold no drawing logic.
     tool_options_model(canvas)  options of the active tool on the board
     image_model(canvas)         properties of the selected picture
     capture_model(doc, board)   "Capture 3D view" dialog
+    guide_model(board)          "3D view guide" dialog of the board
 """
 
 from . import model, prefs
@@ -318,3 +319,53 @@ class CaptureModel(PanelModel):
 
 def capture_model(doc, board=None):
     return CaptureModel(doc, board)
+
+
+
+# ----------------------------------------------------------------------
+#  3D view guide (underlay) of the board
+# ----------------------------------------------------------------------
+class GuideModel(PanelModel):
+    """The board's 3D view guide: a view along the sheet's normal, framed
+    on the sheet in true size, drawn under the strokes and never exported.
+    OK captures it; 'Remove the guide' clears it."""
+
+    def __init__(self, board):
+        self.board = board
+        current = board.sheet.underlay or {}
+        self.v = {"style": current.get("style", "edges"),
+                  "hide": current.get("hide_sheets", True)}
+
+        def field(name):
+            return (lambda: self.v[name]), (lambda value: self.v.__setitem__(name, value))
+        params = [
+            Param("style", tr("Style:"), "choice", *field("style"),
+                  options=[("edges", tr("Edges (black on white)")),
+                           ("wireframe", tr("Wireframe")), ("shaded", tr("Shaded"))]),
+            Param("hide", tr("Hide the other sketch sheets"), "bool", *field("hide")),
+        ]
+        actions = [Action("clear", tr("Remove the guide"), self.clear)]
+        PanelModel.__init__(self, tr("3D view guide"), params, actions,
+                            hint=tr("The model seen along the sheet's normal, in true size: "
+                                    "trace over it. Never in the 3D image nor the exports; "
+                                    "its opacity is in the layer panel."))
+
+    def clear(self):
+        self.board.canvas.set_guide(None, None)
+        return "close"
+
+    def accept(self):
+        from . import capture
+        try:
+            c = self.board.canvas
+            obj = c.document().getObject(self.board.sheet_name)
+            img, settings = capture.capture_plane(obj, c.sheet, self.v["style"], self.v["hide"])
+        except Exception as exc:
+            self.error = str(exc)
+            return False
+        self.board.canvas.set_guide(img, settings)
+        return True
+
+
+def guide_model(board):
+    return GuideModel(board)

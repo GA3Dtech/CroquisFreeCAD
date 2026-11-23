@@ -72,7 +72,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.3.0"
+API_VERSION = "1.4.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -173,6 +173,7 @@ def _sheet_info(obj):
         "image_plane": obj.ImagePlane.Name if obj.ImagePlane is not None else None,
         "strokes": len(data.strokes),
         "images": len(data.images()),
+        "underlay": data.underlay,
         "strokes_per_layer": counts,
         "layers": [{"key": k, "label": label, "blend": blend,
                     "visible": bool(data.layers[k]["visible"]),
@@ -725,6 +726,61 @@ def capture_3d_view(doc=None, width_px=None, height_px=None, background="current
     return {"sheet": _sheet_info(obj), "image": _image_out(e), "camera": camera}
 
 
+def capture_underlay(sheet, mode="plane", style="edges", opacity=0.4, hide_sheets=True,
+                     doc=None):
+    """GUI. 3D view guide under the strokes of a sheet: mode "plane" = an
+    orthographic view along the sheet's normal, framed exactly on the sheet
+    in true size (a stroke drawn on an edge falls on it in 3D). style:
+    edges (black lines on white), wireframe, shaded. Stored apart from the
+    strokes, shown on the board, never in the image plane nor the exports
+    (render_png(include_underlay=True) to include it). Returns metadata."""
+    from . import capture
+    from . import sheet as sheet_mod
+    capture.require_gui()
+    if mode != "plane":
+        raise InvalidArgumentError("mode must be 'plane' (camera mode: next version)")
+    if style not in capture.UNDERLAY_STYLES:
+        raise InvalidArgumentError("style must be one of %s, got %r"
+                                   % (", ".join(capture.UNDERLAY_STYLES), style))
+    opacity = _num(opacity, "opacity", 0.0, 1.0)
+    obj = _sheet(sheet, doc)
+    _ensure_qt()
+    img, settings = capture.capture_plane(obj, sheet_mod.sheet_data(obj), style,
+                                          bool(hide_sheets))
+    from . import images
+    tmp = images.save_temp(img, "croquis_underlay")
+
+    def change(data):
+        data.underlay = settings
+        data.files[model.SheetData.UNDERLAY_FILE] = tmp
+        data.layers["underlay"]["opacity"] = opacity
+        data.layers["underlay"]["visible"] = True
+    try:
+        return _edit(obj, None, tr("Edit sketch sheet"), change)
+    finally:
+        _remove_temps([tmp])
+
+
+def refresh_underlay(sheet, doc=None):
+    """GUI. Capture the guide again with its stored settings."""
+    from . import sheet as sheet_mod
+    obj = _sheet(sheet, doc)
+    data = sheet_mod.sheet_data(obj)
+    if data.underlay is None:
+        raise InvalidArgumentError("the sheet has no underlay")
+    s = data.underlay
+    return capture_underlay(obj, s.get("mode", "plane"), s.get("style", "edges"),
+                            data.layers["underlay"]["opacity"], s.get("hide_sheets", True))
+
+
+def clear_underlay(sheet, doc=None):
+    """Remove the 3D view guide of a sheet."""
+    def change(data):
+        data.underlay = None
+        data.files.pop(model.SheetData.UNDERLAY_FILE, None)
+    return _edit(sheet, doc, tr("Edit sketch sheet"), change)
+
+
 def restore_image_view(sheet, image_id, doc=None):
     """GUI. Put the 3D view back to the camera recorded with a captured
     picture. Returns the camera."""
@@ -756,7 +812,7 @@ def render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None):
         os.close(fd)
     _ensure_qt()
     data = sheet_mod.sheet_data(obj)
-    if not compositor.save_png(data, path, dpi=dpi, export=not include_underlay):
+    if not compositor.save_png(data, path, dpi=dpi, underlay=bool(include_underlay)):
         raise InvalidArgumentError("could not write %r" % (path,))
     return path
 
@@ -774,10 +830,10 @@ def export_png(sheet, path, dpi=None, doc=None):
 PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper", "set_layer",
           "list_strokes", "add_strokes", "add_arrow", "delete_strokes", "add_image",
           "new_sheet_from_image", "list_images", "update_image_element",
-          "delete_image_element", "capture_3d_view", "restore_image_view", "render_png",
-          "export_png", "describe"]
+          "delete_image_element", "capture_3d_view", "restore_image_view", "capture_underlay",
+          "refresh_underlay", "clear_underlay", "render_png", "export_png", "describe"]
 
-GUI_ONLY = ["capture_3d_view", "restore_image_view"]
+GUI_ONLY = ["capture_3d_view", "restore_image_view", "capture_underlay", "refresh_underlay"]
 
 
 def describe():

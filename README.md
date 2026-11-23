@@ -34,7 +34,8 @@ Version 0.2.
 | Pictures pasted (Ctrl+V), dropped or inserted, new sheet from the clipboard; move, resize, rotate, opacity, stacking | done (v0.3) |
 | Manual 3D view capture onto a new sheet or the open board, camera kept ("Back to this view") | done (v0.3) |
 | Arrows: straight or curved, heads at the start / end, open / filled / dot | done (v0.3) |
-| 3D view underlay (plane and camera), text and callouts | v0.3 |
+| 3D view guide under the strokes, aligned on the sheet plane in true size, never exported | done (v0.3) |
+| Camera-aligned guide (overpaint), text and callouts | v0.3 (next) |
 | Ellipses, perspective grids | later |
 | SVG export, TechDraw, chisel tip, custom palettes | v0.4 |
 
@@ -88,6 +89,12 @@ with the edit tool (`V`) drag it, resize it by a corner (`Shift`: free
 proportions), rotate it with the round handle; its panel sets opacity,
 whether it shows in the 3D image, lock, stacking. Erasers never touch
 pictures. `Ctrl+C` copies the rendered sheet.
+
+**3D guide**: *3D guide…* on the board captures the model seen along the
+sheet's normal, framed on the sheet in true size (edges, wireframe or
+shaded), and shows it under the strokes: a stroke drawn on an edge falls on
+it in 3D. The guide never goes into the image plane nor the exports; its
+opacity is in the layer panel.
 
 With the raster tools, `Shift` at the press draws a straight line. Line and
 spline strokes have a width profile: position of the widest point, start

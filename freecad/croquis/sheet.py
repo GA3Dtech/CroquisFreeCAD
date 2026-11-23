@@ -68,6 +68,8 @@ def sheet_data(obj):
         name = getattr(e, "file", None)
         if name and hasattr(obj, name):
             data.files[name] = getattr(obj, name)
+    if data.underlay is not None and hasattr(obj, model.SheetData.UNDERLAY_FILE):
+        data.files[model.SheetData.UNDERLAY_FILE] = getattr(obj, model.SheetData.UNDERLAY_FILE)
     return data
 
 
@@ -95,6 +97,19 @@ def sync_files(obj, data):
     for name in list(obj.PropertiesList):
         if name.startswith(IMAGE_PREFIX) and name not in used:
             obj.removeProperty(name)
+    # the 3D view guide (never drawn in the image plane)
+    guide = model.SheetData.UNDERLAY_FILE
+    path = data.files.get(guide) if data.underlay is not None else None
+    if path:
+        if not hasattr(obj, guide):
+            obj.addProperty("App::PropertyFileIncluded", guide, "Croquis images",
+                            "3D view guide under the strokes (not in the image plane)")
+            obj.setEditorMode(guide, 2)
+        if getattr(obj, guide) != path:
+            setattr(obj, guide, path)
+        data.files[guide] = getattr(obj, guide)
+    elif hasattr(obj, guide):
+        obj.removeProperty(guide)
 
 
 # ----------------------------------------------------------------------
@@ -373,6 +388,7 @@ def open_board(obj):
     board = SheetBoard(sheet_data(obj), "%s - Croquis" % obj.Label, on_apply=apply,
                        export_path=os.path.join(export_dir, obj.Label + ".png"))
     board.canvas.doc_name = doc_name
+    board.sheet_name = obj_name
     sub = mdi.addSubWindow(board)
     sub.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
     sub.setWindowIcon(QtGui.QIcon(icon("Croquis.svg")))

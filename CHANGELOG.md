@@ -46,6 +46,14 @@ All notable changes to this project are documented here. The format follows
   view, never the board, with the sheets hidden, onto a new sheet shaped
   like the view or onto the open board; the camera is kept with the picture
   ("Back to this view"). Shared capture code in `capture.py`.
+- 3D view guide (underlay) aligned on the sheet plane: orthographic view
+  along the sheet's normal, framed exactly on the sheet in true size, styles
+  edges / wireframe / shaded; stored apart from the strokes in the
+  `.FCStd`, shown on the board, never in the image plane nor the exports;
+  "3D guide…" on the board. The navigation cube is no longer drawn into
+  captures.
+- API 1.4: `capture_underlay` (mode "plane"), `refresh_underlay`,
+  `clear_underlay`; `render_png(include_underlay=True)`.
 - Arrow tool (`A`): straight or curved vector arrows, heads at the start
   and / or end (open, filled, dot, size), editable with the edit tool.
 - API 1.3: `add_arrow`; strokes accept `"heads"` for arrows.

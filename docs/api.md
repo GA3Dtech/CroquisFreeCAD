@@ -47,6 +47,9 @@ from freecad.croquis import api
 | `delete_image_element(sheet, image_id, doc=None)` | metadata |
 | `capture_3d_view(doc=None, width_px=None, height_px=None, background="current", hide_sheets=True, target_sheet=None, factor=1.0)` | **GUI.** `{"sheet", "image", "camera"}` — picture of the document's 3D view on a new sheet (or `target_sheet`), camera kept |
 | `restore_image_view(sheet, image_id, doc=None)` | **GUI.** the camera; puts the 3D view back where the picture was captured |
+| `capture_underlay(sheet, mode="plane", style="edges", opacity=0.4, hide_sheets=True, doc=None)` | **GUI.** metadata — 3D view guide along the sheet's normal, true size, never exported (`style`: edges, wireframe, shaded) |
+| `refresh_underlay(sheet, doc=None)` | **GUI.** metadata — captured again with the stored settings |
+| `clear_underlay(sheet, doc=None)` | metadata |
 | `render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None)` | path of the PNG (temporary file when `path` is `None`); the document is not changed |
 | `export_png(sheet, path, dpi=None, doc=None)` | path |
 | `describe()` | API version, functions, tools, layers, formats, papers, planes |

@@ -21,6 +21,8 @@ by a linked `Image::ImagePlane`. Read `README.md` first; the full design
 | `freecad/croquis/canvas/view.py` | SheetCanvas (input devices, zoom, pan, shortcuts, painting) and SheetBoard (toolbar, tool options, paper / layers panel) |
 | `freecad/croquis/canvas/tools.py` | One object per tool: brushes, straight line, spline, erasers, vector edit |
 | `freecad/croquis/canvas/undo.py` | QUndoStack commands at stroke level |
+| `freecad/croquis/images.py` | Pictures: reading (EXIF orientation), reduction to the useful resolution, clipboard / drop data |
+| `freecad/croquis/capture.py` | 3D view captures (manual capture, plane-aligned guide), always the document's 3D view, sheets / navigation cube hidden |
 | `freecad/croquis/panel_model.py` | Single description of a panel (typed parameters, actions, sections) — pure Python |
 | `freecad/croquis/panels.py` | The workbench's panel models (New sheet, tool options…), calling `api.py` |
 | `freecad/croquis/bridge.py` | Generic engine: `Bridge` (QML), `WidgetForm` (widget fallback), `I18n`, theme; `LayersBridge` |
@@ -71,6 +73,12 @@ FreeCAD restart.
   stroke is drawn in its own buffer with `CompositionMode_Source` (no
   accumulation inside the stroke), then composited on its layer with the tool
   opacity and the layer blend mode (multiply for markers).
+- Format v2: content images (`elements`, layer `images`, included in the
+  image plane) versus the guide (`underlay`, layer `underlay`, NEVER in the
+  image plane or exports unless asked). Pictures live in
+  `App::PropertyFileIncluded` properties (`Image_<id>`, `UnderlayImage`),
+  never base64 in the JSON. New element kinds go in `model.ELEMENT_KINDS`
+  (unknown kinds are kept), no format bump needed.
 - Vector strokes (`kind == "vector"`) store a Bezier chain in `points`
   (P0 C1 C2 P1 ..., pressure unused) and their width profile in `params`.
   Raster strokes store input points (x, y, pressure).

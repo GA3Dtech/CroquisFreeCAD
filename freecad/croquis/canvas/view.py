@@ -424,6 +424,23 @@ class SheetCanvas(QtWidgets.QWidget):
                 pass
         return added
 
+    def set_guide(self, img, settings):
+        """Show a captured 3D view guide (or remove it with None). Saved
+        with the sheet when the board closes."""
+        from .. import images
+        key = model.SheetData.UNDERLAY_FILE
+        if img is None:
+            self.sheet.underlay = None
+            self.sheet.files.pop(key, None)
+        else:
+            self.sheet.underlay = settings
+            self.sheet.files[key] = images.save_temp(img, "croquis_underlay")
+            self.sheet.layers["underlay"]["visible"] = True
+        self.compositor.load_underlay()
+        self.compositor.compose()
+        self.update()
+        self.sheetEdited.emit()
+
     def dragEnterEvent(self, event):
         from .. import images
         img, paths = images.from_mime(event.mimeData())
@@ -975,6 +992,10 @@ class SheetBoard(QtWidgets.QWidget):
         a = tb.addAction(QtGui.QIcon(icon("Capture3D.svg")), tr("Capture 3D view"))
         a.setToolTip(tr("Put a picture of the document's 3D view on the sheet, to draw on it"))
         a.triggered.connect(self.capture_3d)
+        a = tb.addAction(QtGui.QIcon(icon("Guide3D.svg")), tr("3D guide…"))
+        a.setToolTip(tr("Trace over the model: a true-size view along the sheet's normal, "
+                        "under the strokes, never exported"))
+        a.triggered.connect(self.guide_3d)
         a = tb.addAction(QtGui.QIcon(icon("ExportPng.svg")), tr("Export PNG…"))
         a.setToolTip(tr("Save the sheet as a PNG image"))
         a.triggered.connect(lambda: export_png_dialog(self, self.sheet, self.export_path))
@@ -1021,6 +1042,10 @@ class SheetBoard(QtWidgets.QWidget):
                "{n} stroke(s)").format(w=s.width, h=s.height, dpi=s.dpi, pw=w, ph=h,
                                        zoom=int(round(self.canvas.zoom * 100)),
                                        n=len(s.strokes)))
+
+    def guide_3d(self):
+        from .. import panels, qml_host
+        qml_host.run_dialog(panels.guide_model(self), parent=self)
 
     def capture_3d(self):
         from .. import panels, qml_host

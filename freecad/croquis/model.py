@@ -113,7 +113,7 @@ LAYER_KEYS = [k for k, _l, _b in LAYERS]
 # Layers the eraser can work on (layer "*" of an eraser stroke = all of them)
 ERASABLE_LAYERS = ["construction", "marker", "lines", "highlights"]
 # Layers shown in the board's layer panel (the guide has its own controls)
-PANEL_LAYERS = ["images"] + ERASABLE_LAYERS
+PANEL_LAYERS = ["underlay", "images"] + ERASABLE_LAYERS
 ALL_LAYERS = "*"
 
 # Drawing tools and their defaults. Sizes in mm.
@@ -498,6 +498,7 @@ class SheetData(object):
         self.version = FORMAT_VERSION   # version read (kept when newer)
         self.extra = {}                 # unknown top-level keys, kept as is
         self.elements = []              # images, texts... (format v2)
+        self.underlay = None            # guide capture settings (format v2) or None
         self.files = {}                 # element file name -> local path (runtime)
 
     # --- size in pixels at the sheet resolution
@@ -527,7 +528,9 @@ class SheetData(object):
                 if s.layer == layer or (s.layer == ALL_LAYERS and layer in ERASABLE_LAYERS)]
 
     # --- serialization
-    KEYS = ("version", "width", "height", "dpi", "paper", "layers", "strokes", "elements")
+    KEYS = ("version", "width", "height", "dpi", "paper", "layers", "strokes", "elements",
+            "underlay")
+    UNDERLAY_FILE = "UnderlayImage"     # file property holding the guide picture
 
     def to_dict(self):
         d = dict(self.extra)
@@ -539,6 +542,8 @@ class SheetData(object):
             "strokes": [s.to_dict() for s in self.strokes],
             "elements": [e.to_dict() for e in self.elements],
         })
+        if self.underlay is not None:
+            d["underlay"] = self.underlay
         return d
 
     def to_json(self):
@@ -565,4 +570,5 @@ class SheetData(object):
             sheet.layers.setdefault(k, {}).update(v)
         sheet.strokes = [Stroke.from_dict(s) for s in d.get("strokes", [])]
         sheet.elements = [element_from_dict(e) for e in d.get("elements", [])]
+        sheet.underlay = d.get("underlay")
         return sheet
