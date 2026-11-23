@@ -57,6 +57,10 @@ All notable changes to this project are documented here. The format follows
 - Arrow tool (`A`): straight or curved vector arrows, heads at the start
   and / or end (open, filled, dot, size), editable with the edit tool.
 - API 1.3: `add_arrow`; strokes accept `"heads"` for arrows.
+- A sheet created from a 3D view capture is placed in the camera plane, at
+  the focal distance, scaled so it lies exactly on the captured view
+  (orthographic and perspective); `capture_3d_view(align="camera")` by
+  default, `"plane"` for the former XZ placement.
 - API 1.2: `capture_3d_view`, `restore_image_view` (GUI only).
 - API 1.1: `add_image`, `new_sheet_from_image`, `list_images`,
   `update_image_element`, `delete_image_element`; `create_sheet` accepts

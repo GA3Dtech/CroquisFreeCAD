@@ -578,14 +578,20 @@ def _remove_temps(paths, keep=None):
                 pass
 
 
-def _sheet_with_picture(d, img, path, size, dpi, paper, plane, label, camera=None):
+def _sheet_with_picture(d, img, path, size, dpi, paper, plane, label, camera=None,
+                        placement=None, scale=None):
     """New sheet of `size` mm with the picture filling it, as ONE
-    transaction. Returns (sheet object, element)."""
+    transaction (optionally at `placement`, image plane scaled by
+    `scale`). Returns (sheet object, element)."""
     from . import sheet as sheet_mod
     temps = []
 
     def run():
         obj = sheet_mod.create_sheet(d, "custom", dpi, paper, plane, label, size=size)
+        if placement is not None:
+            obj.ImagePlane.Placement = placement
+        if scale is not None:
+            obj.Scale = scale
         data = sheet_mod.sheet_data(obj)
         e = image_element(data, img, path, margin=0.0, camera=camera)
         data.elements.append(e)
@@ -683,13 +689,15 @@ def delete_image_element(sheet, image_id, doc=None):
 #  3D view capture (GUI)
 # ----------------------------------------------------------------------
 def capture_3d_view(doc=None, width_px=None, height_px=None, background="current",
-                    hide_sheets=True, target_sheet=None, factor=1.0):
+                    hide_sheets=True, target_sheet=None, factor=1.0, align="camera"):
     """GUI. Picture of the document's 3D view (never the board), put on a
     new sheet shaped like the view, or on target_sheet (fitted). The view's
     camera is kept with the picture (restore_image_view). background:
     current / white / transparent; hide_sheets: Croquis sheets are hidden
-    during the capture. Returns {"sheet": metadata, "image": element,
-    "camera": camera}."""
+    during the capture. align (new sheet): "camera" places the sheet in the
+    camera plane at the focal distance and scales it so it lies exactly on
+    the captured view (true scale there); "plane" puts it on XZ, scale 1.
+    Returns {"sheet": metadata, "image": element, "camera": camera}."""
     from . import capture
     capture.require_gui()
     d = _doc(doc)
@@ -701,6 +709,8 @@ def capture_3d_view(doc=None, width_px=None, height_px=None, background="current
                               or not 16 <= v <= 8000):
             raise InvalidArgumentError("%s must be an integer in [16, 8000]" % name)
     factor = _num(factor, "factor", 0.25, 4.0)
+    if align not in ("camera", "plane"):
+        raise InvalidArgumentError("align must be 'camera' or 'plane', got %r" % (align,))
     target = _sheet(target_sheet, d) if target_sheet is not None else None
     img, camera = capture.capture(d, width_px, height_px, background, bool(hide_sheets),
                                   factor)
@@ -708,8 +718,13 @@ def capture_3d_view(doc=None, width_px=None, height_px=None, background="current
     if target is None:
         k = 297.0 / float(max(img.width(), img.height()))
         size = (round(img.width() * k, 2), round(img.height() * k, 2))
+        placement = scale = None
+        if align == "camera":
+            placement, vis_w, _vis_h = capture.camera_frame(camera["inventor"], img.width(),
+                                                            img.height())
+            scale = vis_w / size[0]
         obj, e = _sheet_with_picture(d, img, None, size, 150, "white", "XZ", tr("3D view"),
-                                     camera)
+                                     camera, placement, scale)
     else:
         obj = target
         temps = []

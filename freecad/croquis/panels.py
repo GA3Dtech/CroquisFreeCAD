@@ -275,7 +275,8 @@ class CaptureModel(PanelModel):
         self.v = {"factor": prefs.get("CaptureFactor"),
                   "background": prefs.get("CaptureBackground"),
                   "hide": prefs.get("CaptureHideSheets"),
-                  "target": "board" if board is not None else "new"}
+                  "target": "board" if board is not None else "new",
+                  "align": True}
 
         def field(name):
             return (lambda: self.v[name]), (lambda value: self.v.__setitem__(name, value))
@@ -290,6 +291,10 @@ class CaptureModel(PanelModel):
             Param("target", tr("Put the picture on:"), "choice", *field("target"),
                   options=[("new", tr("A new sheet")), ("board", tr("The open board"))],
                   visible=lambda: board is not None),
+            Param("align", tr("Place the new sheet on the view (camera plane, scale)"),
+                  "bool", *field("align"), visible=lambda: self.v["target"] == "new",
+                  tip=tr("The sheet lies exactly on the captured view in 3D, at the right "
+                         "scale where the camera focuses")),
         ]
         if self.v["factor"] not in ("1", "2", "4"):
             self.v["factor"] = "1"
@@ -305,9 +310,10 @@ class CaptureModel(PanelModel):
                                               factor=float(self.v["factor"]))
                 self.result = {"element": self.board.canvas.add_picture(img, camera=camera)}
             else:
-                self.result = api.capture_3d_view(self.doc, background=self.v["background"],
-                                                  hide_sheets=self.v["hide"],
-                                                  factor=float(self.v["factor"]))
+                self.result = api.capture_3d_view(
+                    self.doc, background=self.v["background"], hide_sheets=self.v["hide"],
+                    factor=float(self.v["factor"]),
+                    align="camera" if self.v["align"] else "plane")
         except Exception as exc:
             self.error = str(exc)
             return False

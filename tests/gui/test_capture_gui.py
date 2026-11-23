@@ -102,3 +102,41 @@ def test_capture_with_board_open_targets_the_3d_view(scene):
     arr = to_array(load(board.sheet.files[e.file]))
     assert blue_pixels(arr) > 50                      # the 3D view, not the board
     assert kraft_pixels(arr) == 0                     # sheets hidden, no board pixels
+
+
+@pytest.mark.parametrize("camera_type", ["Orthographic", "Perspective"])
+def test_new_sheet_lies_on_the_captured_view(scene, camera_type):
+    doc, view = scene
+    view.setCameraType(camera_type)
+    view.viewIsometric()
+    view.fitAll()
+    process()
+    res = api.capture_3d_view(doc, background="white")
+    obj = doc.getObject(res["sheet"]["name"])
+    plc = obj.ImagePlane.Placement
+    cam = view.getCameraOrientation()
+    assert max(abs(a - b) for a, b in zip(plc.Rotation.Q, cam.Q)) < 1e-6 or \
+        max(abs(a + b) for a, b in zip(plc.Rotation.Q, cam.Q)) < 1e-6
+    w, h = res["sheet"]["width_mm"], res["sheet"]["height_mm"]
+    k = obj.Scale
+    assert obj.ImagePlane.XSize.Value == pytest.approx(w * k)
+    # the box centre, seen along the view, falls on the box in the picture
+    box = doc.getObject("Box")
+    centre = box.Shape.BoundBox.Center
+    d = view.getViewDirection()
+    # project the centre on the sheet plane along the view direction
+    n = plc.Rotation.multVec(App.Vector(0, 0, 1))
+    t = (plc.Base - centre).dot(n) / d.dot(n)
+    hit = centre + d * t if camera_type == "Orthographic" else None
+    if hit is None:                                      # perspective: through the eye
+        eye = App.Vector(*[float(v) for v in __import__("re").search(
+            r"position\s+(\S+)\s+(\S+)\s+(\S+)", view.getCamera()).groups()])
+        ray = centre - eye
+        hit = eye + ray * ((plc.Base - eye).dot(n) / ray.dot(n))
+    local = plc.Rotation.inverted().multVec(hit - plc.Base)
+    sx, sy = local.x / k + w / 2, h / 2 - local.y / k
+    arr = picture_of(doc, res)
+    ph, pw = arr.shape[:2]
+    X, Y = int(sx / w * pw), int(sy / h * ph)
+    patch = arr[max(0, Y - 3):Y + 4, max(0, X - 3):X + 4]
+    assert blue_pixels(patch) > 0, (X, Y)

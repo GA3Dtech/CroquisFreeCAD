@@ -254,3 +254,36 @@ def capture_plane(obj, data, style="edges", hide_sheets=True, max_px=3000):
     if style == "edges":
         img = grayscale(img)
     return img, {"mode": "plane", "style": style, "hide_sheets": bool(hide_sheets)}
+
+
+# ----------------------------------------------------------------------
+#  Sheet placed in the camera plane (capture onto a new sheet)
+# ----------------------------------------------------------------------
+def _floats(text, key, n):
+    import re
+    m = re.search(r"\b%s\s+([-+0-9.eE]+(?:\s+[-+0-9.eE]+){%d})" % (key, n - 1), text)
+    return [float(v) for v in m.group(1).split()] if m else None
+
+
+def camera_frame(camera_text, view_w, view_h):
+    """(Placement, visible width mm, visible height mm) of the plane at
+    the camera's focal distance, facing the camera, framing exactly what a
+    view_w x view_h picture of that camera shows (orthographic: the view
+    height; perspective: the field angle at the focal distance; Inventor's
+    ADJUST_CAMERA rule for portrait views)."""
+    import math
+    pos = _floats(camera_text, "position", 3)
+    ori = _floats(camera_text, "orientation", 4)
+    focal = (_floats(camera_text, "focalDistance", 1) or [10.0])[0]
+    if pos is None or ori is None:
+        raise ValueError("unreadable camera")
+    rot = App.Rotation(App.Vector(*ori[:3]), math.degrees(ori[3]))
+    centre = App.Vector(*pos) + rot.multVec(App.Vector(0, 0, -1)) * focal
+    if "OrthographicCamera" in camera_text.split("{", 1)[0]:
+        h = (_floats(camera_text, "height", 1) or [100.0])[0]
+    else:
+        angle = (_floats(camera_text, "heightAngle", 1) or [math.pi / 4])[0]
+        h = 2.0 * focal * math.tan(angle / 2.0)
+    aspect = float(view_w) / float(view_h)
+    vis_w, vis_h = (h * aspect, h) if aspect >= 1 else (h, h / aspect)
+    return App.Placement(centre, rot), vis_w, vis_h
