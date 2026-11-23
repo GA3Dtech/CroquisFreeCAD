@@ -120,6 +120,7 @@ class SheetCanvas(QtWidgets.QWidget):
         self.undo_stack = QUndoStack(self)
         self.tool_settings = default_settings()
         self.tool = "pencil"
+        self.doc_name = None        # set by sheet.open_board
         self.handler = tools.make_tool(self, self.tool)
         self.zoom = 1.0
         self.offset = QtCore.QPointF(0, 0)
@@ -383,11 +384,16 @@ class SheetCanvas(QtWidgets.QWidget):
         self.undo_stack.push(undo.ReplaceElement(self, e, new, merge_key, index))
         self.settingsChanged.emit()
 
-    def add_picture(self, img, path=None, centre_mm=None):
+    def document(self):
+        """FreeCAD document of the sheet being drawn (set by the board)."""
+        import FreeCAD as App
+        return App.getDocument(self.doc_name)
+
+    def add_picture(self, img, path=None, centre_mm=None, camera=None):
         """New image element from a QImage (paste, drop, capture): fitted
         in the sheet, or centred on centre_mm. Returns the element."""
         from .. import api
-        e = api.image_element(self.sheet, img, path)
+        e = api.image_element(self.sheet, img, path, camera=camera)
         if centre_mm is not None:
             e.x, e.y = centre_mm[0] - e.w / 2.0, centre_mm[1] - e.h / 2.0
         self.undo_stack.push(undo.AddElement(self, e))
@@ -959,6 +965,9 @@ class SheetBoard(QtWidgets.QWidget):
         a = tb.addAction(QtGui.QIcon(icon("InsertImage.svg")), tr("Insert image…"))
         a.setToolTip(tr("Put a picture on the sheet (also Ctrl+V or drag and drop)"))
         a.triggered.connect(self.insert_image)
+        a = tb.addAction(QtGui.QIcon(icon("Capture3D.svg")), tr("Capture 3D view"))
+        a.setToolTip(tr("Put a picture of the document's 3D view on the sheet, to draw on it"))
+        a.triggered.connect(self.capture_3d)
         a = tb.addAction(QtGui.QIcon(icon("ExportPng.svg")), tr("Export PNG…"))
         a.setToolTip(tr("Save the sheet as a PNG image"))
         a.triggered.connect(lambda: export_png_dialog(self, self.sheet, self.export_path))
@@ -1005,6 +1014,10 @@ class SheetBoard(QtWidgets.QWidget):
                "{n} stroke(s)").format(w=s.width, h=s.height, dpi=s.dpi, pw=w, ph=h,
                                        zoom=int(round(self.canvas.zoom * 100)),
                                        n=len(s.strokes)))
+
+    def capture_3d(self):
+        from .. import panels, qml_host
+        qml_host.run_dialog(panels.capture_model(self.canvas.document(), self), parent=self)
 
     def insert_image(self):
         from .. import images

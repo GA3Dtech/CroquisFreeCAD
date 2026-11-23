@@ -24,6 +24,7 @@ hand twice. The models call api.py; they hold no drawing logic.
     new_sheet_model(doc)        "New sketch sheet" dialog
     tool_options_model(canvas)  options of the active tool on the board
     image_model(canvas)         properties of the selected picture
+    capture_model(doc, board)   "Capture 3D view" dialog
 """
 
 from . import model, prefs
@@ -187,6 +188,16 @@ def image_model(canvas):
             from .canvas import undo
             c.undo_stack.push(undo.RemoveElements(c, [e]))
 
+    def back_to_view():
+        e = img()
+        if e is None or not e.camera:
+            raise ValueError(tr("This picture has no recorded 3D view."))
+        from . import capture
+        doc = c.document()
+        capture.restore_camera(capture.view_3d(doc), e.camera)
+        import FreeCADGui as Gui
+        Gui.getDocument(doc.Name).activateView("Gui::View3DInventor")
+
     def size_note():
         e = img()
         if e is None or not e.source_px:
@@ -213,5 +224,68 @@ def image_model(canvas):
         Action("front", tr("Bring to front"), lambda: restack(True)),
         Action("back", tr("Send to back"), lambda: restack(False)),
         Action("delete", tr("Delete image"), delete),
+        Action("view", tr("Back to this view"), back_to_view,
+               tip=tr("Put the 3D view back where this capture was taken")),
     ]
     return PanelModel(tr("Image"), params, actions)
+
+
+# ----------------------------------------------------------------------
+#  3D view capture
+# ----------------------------------------------------------------------
+class CaptureModel(PanelModel):
+    """Resolution, background, hiding the sheets, destination (a new sheet,
+    or the open board). OK captures the document's 3D view; the picture is
+    a content image, ready to draw, arrow and write on."""
+
+    def __init__(self, doc, board=None):
+        self.doc = doc
+        self.board = board
+        self.result = None
+        self.v = {"factor": prefs.get("CaptureFactor"),
+                  "background": prefs.get("CaptureBackground"),
+                  "hide": prefs.get("CaptureHideSheets"),
+                  "target": "board" if board is not None else "new"}
+
+        def field(name):
+            return (lambda: self.v[name]), (lambda value: self.v.__setitem__(name, value))
+        params = [
+            Param("factor", tr("Resolution:"), "choice", *field("factor"),
+                  options=[("1", tr("View size")), ("2", tr("Twice the view size")),
+                           ("4", tr("4 × the view size"))]),
+            Param("background", tr("Background:"), "choice", *field("background"),
+                  options=[("current", tr("As in the view")), ("white", tr("White")),
+                           ("transparent", tr("Transparent"))]),
+            Param("hide", tr("Hide the sketch sheets"), "bool", *field("hide")),
+            Param("target", tr("Put the picture on:"), "choice", *field("target"),
+                  options=[("new", tr("A new sheet")), ("board", tr("The open board"))],
+                  visible=lambda: board is not None),
+        ]
+        if self.v["factor"] not in ("1", "2", "4"):
+            self.v["factor"] = "1"
+        PanelModel.__init__(self, tr("Capture 3D view"), params,
+                            hint=tr("Frame the 3D view first: the whole view is captured."))
+
+    def accept(self):
+        from . import api, capture
+        try:
+            if self.v["target"] == "board" and self.board is not None:
+                img, camera = capture.capture(self.doc, background=self.v["background"],
+                                              hide_sheets=self.v["hide"],
+                                              factor=float(self.v["factor"]))
+                self.result = {"element": self.board.canvas.add_picture(img, camera=camera)}
+            else:
+                self.result = api.capture_3d_view(self.doc, background=self.v["background"],
+                                                  hide_sheets=self.v["hide"],
+                                                  factor=float(self.v["factor"]))
+        except Exception as exc:
+            self.error = str(exc)
+            return False
+        prefs.put("CaptureFactor", self.v["factor"])
+        prefs.put("CaptureBackground", self.v["background"])
+        prefs.put("CaptureHideSheets", self.v["hide"])
+        return True
+
+
+def capture_model(doc, board=None):
+    return CaptureModel(doc, board)

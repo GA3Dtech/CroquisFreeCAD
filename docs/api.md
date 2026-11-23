@@ -44,6 +44,8 @@ from freecad.croquis import api
 | `list_images(sheet, doc=None)` | image elements, bottom to top |
 | `update_image_element(sheet, image_id, doc=None, **changes)` | the element (fields `x y w h rotation opacity render locked layer`) |
 | `delete_image_element(sheet, image_id, doc=None)` | metadata |
+| `capture_3d_view(doc=None, width_px=None, height_px=None, background="current", hide_sheets=True, target_sheet=None, factor=1.0)` | **GUI.** `{"sheet", "image", "camera"}` — picture of the document's 3D view on a new sheet (or `target_sheet`), camera kept |
+| `restore_image_view(sheet, image_id, doc=None)` | **GUI.** the camera; puts the 3D view back where the picture was captured |
 | `render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None)` | path of the PNG (temporary file when `path` is `None`); the document is not changed |
 | `export_png(sheet, path, dpi=None, doc=None)` | path |
 | `describe()` | API version, functions, tools, layers, formats, papers, planes |
@@ -90,6 +92,16 @@ api.add_strokes(s["name"], [
     {"tool": "line", "points": [[30, 180], [270, 180]], "profile": {"tin": 0}},
 ], doc=doc)
 print(api.render_png(s["name"], doc=doc))   # read the PNG back to check the result
+```
+
+Capture the 3D view and annotate it (GUI, `execute_code`):
+
+```python
+from freecad.croquis import api
+res = api.capture_3d_view(App.ActiveDocument, background="white")
+api.add_strokes(res["sheet"]["name"], [
+    {"tool": "line", "points": [[40, 40], [120, 90]], "size": 1.2},
+], doc=App.ActiveDocument)
 ```
 
 or build a file without any GUI (`execute_code_headless`):

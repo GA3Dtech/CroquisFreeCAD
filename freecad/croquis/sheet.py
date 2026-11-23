@@ -372,6 +372,7 @@ def open_board(obj):
         else os.path.expanduser("~")
     board = SheetBoard(sheet_data(obj), "%s - Croquis" % obj.Label, on_apply=apply,
                        export_path=os.path.join(export_dir, obj.Label + ".png"))
+    board.canvas.doc_name = doc_name
     sub = mdi.addSubWindow(board)
     sub.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
     sub.setWindowIcon(QtGui.QIcon(icon("Croquis.svg")))
@@ -381,6 +382,19 @@ def open_board(obj):
     mdi.setActiveSubWindow(sub)
     board.canvas.setFocus()
     return board
+
+
+def active_board():
+    """The board in the active MDI tab, or None."""
+    import FreeCADGui as Gui
+
+    from .qt import QtWidgets
+    mdi = Gui.getMainWindow().findChild(QtWidgets.QMdiArea)
+    sub = mdi.activeSubWindow() if mdi is not None else None
+    for s in _boards.values():
+        if s is sub:
+            return s.widget()
+    return None
 
 
 def board_of(obj):

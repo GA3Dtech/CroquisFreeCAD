@@ -32,7 +32,8 @@ Version 0.2.
 | Tablet pressure, pressure simulated from mouse speed, undo / redo | done |
 | Sheet stored in the document, linked image plane on XY / XZ / YZ, PNG export | done |
 | Pictures pasted (Ctrl+V), dropped or inserted, new sheet from the clipboard; move, resize, rotate, opacity, stacking | done (v0.3) |
-| Manual 3D view capture, 3D view underlay (plane and camera), arrows, text and callouts | v0.3 |
+| Manual 3D view capture onto a new sheet or the open board, camera kept ("Back to this view") | done (v0.3) |
+| 3D view underlay (plane and camera), arrows, text and callouts | v0.3 |
 | Ellipses, perspective grids | later |
 | SVG export, TechDraw, chisel tip, custom palettes | v0.4 |
 
@@ -57,6 +58,7 @@ Requires FreeCAD 1.0 or newer (Qt5 or Qt6).
 | **Edit sketch sheet** | Reopens the drawing board of the selected sheet (or double-click the sheet in the tree, from any workbench). |
 | **New sheet from clipboard** | Creates a sheet shaped like the picture in the clipboard (screenshot, copied image), with the picture on it, and opens the board. |
 | **Insert image…** | Puts a picture file on the selected sheet. |
+| **Capture 3D view** | Takes a picture of the document's 3D view (resolution, background, sheets hidden) onto a new sheet or the open board, to draw, arrow and write on it; the picture remembers the camera ("Back to this view" in its panel). |
 | **Export sheet as PNG** | Saves the selected sheet as a PNG (transparent where the paper is transparent). |
 
 The drawing board belongs to the Croquis workbench: switching to another

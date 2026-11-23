@@ -153,6 +153,17 @@ def new_sheet_from_clipboard():
     sheet.open_board(obj)
 
 
+def capture_3d_view():
+    """Capture dialog; a new sheet opens on its board."""
+    from . import panels, qml_host, sheet
+    doc = App.ActiveDocument
+    m = panels.capture_model(doc, sheet.active_board())
+    if not qml_host.run_dialog(m) or not m.result or "sheet" not in m.result:
+        return
+    obj = doc.getObject(m.result["sheet"]["name"])
+    sheet.open_board(obj)
+
+
 def edit_sheet():
     from . import sheet
     for obj in selected_sheets():
@@ -201,6 +212,9 @@ def register():
             tr("New sheet from clipboard"),
             tr("Create a sheet shaped like the picture of the clipboard (screenshot, "
                "copied image), with the picture on it, and open the drawing board"))),
+        ("Croquis_Capture3D", _Command(
+            capture_3d_view, "Capture3D.svg", tr("Capture 3D view"),
+            tr("Picture of the 3D view on a sheet, to draw, arrow and write on it"))),
         ("Croquis_InsertImage", _Command(
             insert_image, "InsertImage.svg", tr("Insert image…"),
             tr("Put a picture file on the selected sheet"), needs=_one_sheet)),

@@ -190,3 +190,13 @@ def test_api_file_for_vanilla(doc, sheet, output_dir):
 def test_active_document_default(doc, sheet):
     App.setActiveDocument(doc.Name)
     assert api.list_sheets()[0]["name"] == sheet["name"]
+
+
+def test_gui_functions_refuse_headless(doc, sheet):
+    if App.GuiUp:
+        pytest.skip("headless check")
+    with pytest.raises(errors.GuiRequiredError):
+        api.capture_3d_view(doc)
+    with pytest.raises(errors.GuiRequiredError):
+        api.restore_image_view(sheet["name"], "img1", doc=doc)
+    assert api.describe()["functions"]["capture_3d_view"]["gui"] is True

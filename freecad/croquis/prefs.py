@@ -41,6 +41,9 @@ DEFAULTS = {
     "MouseSpeedPressure": True,     # mouse: fast stroke = thinner, lighter
     "Smoothing": 4,                 # input stabilizer, 0 = raw input
     "UseQmlPanels": True,           # QML panels (else classic widgets)
+    "CaptureFactor": "1",           # 3D view capture: view size x factor
+    "CaptureBackground": "current",  # current / white / transparent
+    "CaptureHideSheets": True,
 }
 
 

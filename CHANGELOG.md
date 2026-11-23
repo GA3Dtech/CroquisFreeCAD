@@ -42,6 +42,11 @@ All notable changes to this project are documented here. The format follows
   the 3D image or not, lock, stacking, delete). Pictures are stored in the
   `.FCStd` (one file property per picture, reduced to the useful resolution
   by default) and drawn in the image plane under the strokes.
+- "Capture 3D view" (workbench and board): picture of the document's 3D
+  view, never the board, with the sheets hidden, onto a new sheet shaped
+  like the view or onto the open board; the camera is kept with the picture
+  ("Back to this view"). Shared capture code in `capture.py`.
+- API 1.2: `capture_3d_view`, `restore_image_view` (GUI only).
 - API 1.1: `add_image`, `new_sheet_from_image`, `list_images`,
   `update_image_element`, `delete_image_element`; `create_sheet` accepts
   `format="custom"` with `width_mm` / `height_mm`.

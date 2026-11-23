@@ -62,7 +62,7 @@ import FreeCAD as App
 
 from . import model
 from .errors import (
-    GuiRequiredError,  # noqa: F401  (part of the API, used by GUI functions)
+    GuiRequiredError,  # noqa: F401  (part of the API, raised by capture.py)
     InvalidArgumentError,
     InvalidStrokeError,
     NoDocumentError,
@@ -70,7 +70,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.1.0"
+API_VERSION = "1.2.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -519,6 +519,28 @@ def _remove_temps(paths, keep=None):
                 pass
 
 
+def _sheet_with_picture(d, img, path, size, dpi, paper, plane, label, camera=None):
+    """New sheet of `size` mm with the picture filling it, as ONE
+    transaction. Returns (sheet object, element)."""
+    from . import sheet as sheet_mod
+    temps = []
+
+    def run():
+        obj = sheet_mod.create_sheet(d, "custom", dpi, paper, plane, label, size=size)
+        data = sheet_mod.sheet_data(obj)
+        e = image_element(data, img, path, margin=0.0, camera=camera)
+        data.elements.append(e)
+        temps.append(data.files[e.file])
+        sheet_mod.write(obj, data)
+        return obj, e
+    try:
+        obj, e = _transaction(d, tr("New sketch sheet"), run)
+    finally:
+        _remove_temps(temps, keep=path)
+    d.recompute()
+    return obj, e
+
+
 def new_sheet_from_image(doc, path, plane="XY", dpi=150, paper="white", long_side_mm=297.0,
                          label=None):
     """New sheet whose proportions follow the picture (long side
@@ -533,22 +555,23 @@ def new_sheet_from_image(doc, path, plane="XY", dpi=150, paper="white", long_sid
     except ValueError as exc:
         raise InvalidArgumentError(str(exc))
     long_side_mm = _num(long_side_mm, "long_side_mm", 20, 5000)
+    d = _doc(doc)
+    _check_sheet_args(dpi, paper, plane)
     k = long_side_mm / float(max(img.width(), img.height()))
-    w, h = round(img.width() * k, 2), round(img.height() * k, 2)
-    info = create_sheet(doc, "custom", dpi, paper, plane, label=label, width_mm=w, height_mm=h)
-    obj = _sheet(info["name"], doc)
-    temps = []
-
-    def change(data):
-        e = image_element(data, img, path, margin=0.0)
-        data.elements.append(e)
-        temps.append(data.files[e.file])
-        return e
-    try:
-        e = _edit(obj, None, tr("Edit sketch sheet"), change)
-    finally:
-        _remove_temps(temps, keep=path)
+    size = (round(img.width() * k, 2), round(img.height() * k, 2))
+    obj, e = _sheet_with_picture(d, img, path, size, dpi, paper, plane, label)
     return {"sheet": _sheet_info(obj), "image": _image_out(e)}
+
+
+def _check_sheet_args(dpi, paper, plane):
+    from . import sheet as sheet_mod
+    if isinstance(dpi, bool) or not isinstance(dpi, int) or not 10 <= dpi <= 1200:
+        raise InvalidArgumentError("dpi must be an integer in [10, 1200], got %r" % (dpi,))
+    if paper not in [k for k, _l, _c in model.PAPERS]:
+        raise InvalidArgumentError("paper must be one of %s, got %r"
+                                   % (", ".join(k for k, _l, _c in model.PAPERS), paper))
+    if plane not in sheet_mod.PLANES:
+        raise InvalidArgumentError("plane must be one of XY, XZ, YZ, got %r" % (plane,))
 
 
 def list_images(sheet, doc=None):
@@ -598,6 +621,67 @@ def delete_image_element(sheet, image_id, doc=None):
 
 
 # ----------------------------------------------------------------------
+#  3D view capture (GUI)
+# ----------------------------------------------------------------------
+def capture_3d_view(doc=None, width_px=None, height_px=None, background="current",
+                    hide_sheets=True, target_sheet=None, factor=1.0):
+    """GUI. Picture of the document's 3D view (never the board), put on a
+    new sheet shaped like the view, or on target_sheet (fitted). The view's
+    camera is kept with the picture (restore_image_view). background:
+    current / white / transparent; hide_sheets: Croquis sheets are hidden
+    during the capture. Returns {"sheet": metadata, "image": element,
+    "camera": camera}."""
+    from . import capture
+    capture.require_gui()
+    d = _doc(doc)
+    if background not in capture.BACKGROUNDS:
+        raise InvalidArgumentError("background must be one of %s, got %r"
+                                   % (", ".join(capture.BACKGROUNDS), background))
+    for name, v in (("width_px", width_px), ("height_px", height_px)):
+        if v is not None and (isinstance(v, bool) or not isinstance(v, int)
+                              or not 16 <= v <= 8000):
+            raise InvalidArgumentError("%s must be an integer in [16, 8000]" % name)
+    factor = _num(factor, "factor", 0.25, 4.0)
+    target = _sheet(target_sheet, d) if target_sheet is not None else None
+    img, camera = capture.capture(d, width_px, height_px, background, bool(hide_sheets),
+                                  factor)
+    _ensure_qt()
+    if target is None:
+        k = 297.0 / float(max(img.width(), img.height()))
+        size = (round(img.width() * k, 2), round(img.height() * k, 2))
+        obj, e = _sheet_with_picture(d, img, None, size, 150, "white", "XZ", tr("3D view"),
+                                     camera)
+    else:
+        obj = target
+        temps = []
+
+        def change(data):
+            e = image_element(data, img, None, camera=camera)
+            data.elements.append(e)
+            temps.append(data.files[e.file])
+            return e
+        try:
+            e = _edit(obj, None, tr("Edit sketch sheet"), change)
+        finally:
+            _remove_temps(temps)
+    return {"sheet": _sheet_info(obj), "image": _image_out(e), "camera": camera}
+
+
+def restore_image_view(sheet, image_id, doc=None):
+    """GUI. Put the 3D view back to the camera recorded with a captured
+    picture. Returns the camera."""
+    from . import capture
+    from . import sheet as sheet_mod
+    capture.require_gui()
+    obj = _sheet(sheet, doc)
+    e = _find_image(sheet_mod.sheet_data(obj), image_id)
+    if not e.camera:
+        raise InvalidArgumentError("the picture %r has no recorded view" % (image_id,))
+    capture.restore_camera(capture.view_3d(obj.Document), e.camera)
+    return e.camera
+
+
+# ----------------------------------------------------------------------
 #  Rendering
 # ----------------------------------------------------------------------
 def render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None):
@@ -631,10 +715,10 @@ def export_png(sheet, path, dpi=None, doc=None):
 # ----------------------------------------------------------------------
 PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper", "set_layer",
           "list_strokes", "add_strokes", "delete_strokes", "add_image", "new_sheet_from_image",
-          "list_images", "update_image_element", "delete_image_element", "render_png",
-          "export_png", "describe"]
+          "list_images", "update_image_element", "delete_image_element", "capture_3d_view",
+          "restore_image_view", "render_png", "export_png", "describe"]
 
-GUI_ONLY = []
+GUI_ONLY = ["capture_3d_view", "restore_image_view"]
 
 
 def describe():
