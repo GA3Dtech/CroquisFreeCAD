@@ -153,6 +153,12 @@ def tool_options_model(canvas):
 
     def hint():
         tool = c.tool
+        if tool == "shape":
+            from .i18n import tr_data as _td
+            brush = _td(model.TOOLS[c.last_brush]["label"]) if hasattr(c, "last_brush") \
+                else ""
+            return tr("Drawn with the last drawing tool ({tool}). Drag to draw; Shift: "
+                      "circle, square or half circle; Esc cancels.").format(tool=brush)
         if tool == "arrow":
             return tr("Straight: drag from the tail to the tip. Curved: draw freely or "
                       "click points, as with the spline.")
@@ -191,6 +197,16 @@ def tool_options_model(canvas):
         Param("head_size", tr("Head size:"), "number", *arrow("head_size"), min=0, max=50,
               step=0.5, decimals=1, unit="mm", tip=tr("0: from the stroke width"),
               visible=is_arrow),
+        Param("shape_kind", tr("Shape:"), "choice",
+              lambda: c.tool_settings["shape"]["kind"],
+              lambda v: c.tool_settings["shape"].__setitem__("kind", v),
+              options=[("circle", tr("Circle")), ("ellipse", tr("Ellipse")),
+                       ("rect", tr("Rectangle")), ("arc", tr("Arc"))],
+              visible=lambda: c.tool == "shape"),
+        Param("shape_hand", tr("Hand-drawn look"), "bool",
+              lambda: c.tool_settings["shape"]["hand"],
+              lambda v: c.tool_settings["shape"].__setitem__("hand", bool(v)),
+              visible=lambda: c.tool == "shape"),
         Param("eraser_mode", tr("Eraser:"), "choice", *option("eraser", "mode"),
               options=[("soft", tr("Soft (pixels)")), ("strokes", tr("Whole strokes"))],
               visible=lambda: c.tool == "eraser"),

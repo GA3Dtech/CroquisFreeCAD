@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Styled shapes (key O): one drop-down button for circle, ellipse,
+  rectangle (Shift: square) and arc, remembering the last one; drawn with
+  the last drawing tool (pencil, marker, spline...) with a slight
+  hand-drawn look (option); ordinary strokes (undo, erasers, exports).
 - "Show / hide the sketches" (shortcut C, V): one checkable button shows or
   hides every sketch of the document; it stays pressed while they are
   shown. API 1.7: `sheets_visible`, `set_sheets_visible`.

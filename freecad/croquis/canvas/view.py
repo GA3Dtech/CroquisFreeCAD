@@ -54,6 +54,7 @@ BOARD_TOOLS = [
     ("line", "Line.svg", QtCore.Qt.Key_L),
     ("spline", "Spline.svg", QtCore.Qt.Key_S),
     ("arrow", "Arrow.svg", QtCore.Qt.Key_A),
+    ("shape", "ShapeCircle.svg", QtCore.Qt.Key_O),
     ("text", "Text.svg", QtCore.Qt.Key_T),
     ("eraser", "Eraser.svg", QtCore.Qt.Key_E),
     ("edit", "EditStroke.svg", QtCore.Qt.Key_V),
@@ -94,7 +95,15 @@ def tool_label(key):
         return tr("Scale: give a real length")
     if key == "text":
         return tr("Text box")
+    if key == "shape":
+        return tr("Shapes: circle, ellipse, rectangle, arc")
     return tr_data(model.TOOLS[key]["label"])
+
+
+# Tools a shape is drawn with (the last one used)
+DRAWING_TOOLS = ("pencil", "grease", "marker", "highlight", "line", "spline", "arrow")
+SHAPE_ICONS = {"circle": "ShapeCircle.svg", "ellipse": "ShapeEllipse.svg",
+               "rect": "ShapeRect.svg", "arc": "ShapeArc.svg"}
 
 
 def default_settings():
@@ -114,6 +123,7 @@ def default_settings():
     out["text"] = {"color": "#1b1b1d", "size": 5.0, "opacity": 1.0, "font": "Sans Serif",
                    "bold": False, "italic": False, "align": "left", "frame": False,
                    "background": False, "leader": False, "w": 0.0}
+    out["shape"] = {"kind": "circle", "hand": True}
     return out
 
 
@@ -195,6 +205,7 @@ class SheetCanvas(QtWidgets.QWidget):
         self.undo_stack = QUndoStack(self)
         self.tool_settings = default_settings()
         self.tool = "pencil"
+        self.last_brush = "pencil"  # drawing tool the shapes use
         self.doc_name = None        # set by sheet.open_board
         self.handler = tools.make_tool(self, self.tool)
         self.zoom = 1.0
@@ -292,6 +303,8 @@ class SheetCanvas(QtWidgets.QWidget):
             return
         self.commit_text()
         self.handler.cancel()
+        if key in DRAWING_TOOLS:
+            self.last_brush = key
         self.tool = key
         self.handler = tools.make_tool(self, key)
         self.toolChanged.emit(key)
@@ -332,6 +345,8 @@ class SheetCanvas(QtWidgets.QWidget):
             d = {"color": sel.color, "size": sel.size, "opacity": sel.opacity}
             d.update(sel.profile())
             return d
+        if self.tool == "shape":                     # shapes use the last drawing tool
+            return self.tool_settings[self.last_brush]
         if self.tool not in self.tool_settings:      # edit, scale
             return dict(self.tool_settings["spline"])
         return self.tool_settings[self.tool]
@@ -353,6 +368,8 @@ class SheetCanvas(QtWidgets.QWidget):
             else:
                 setattr(new, name, value)
             self.undo_stack.push(undo.ReplaceStroke(self, sel, new, merge_key=name))
+        elif self.tool == "shape":
+            self.tool_settings[self.last_brush][name] = value
         elif self.tool in self.tool_settings:
             self.tool_settings[self.tool][name] = value
         self.settingsChanged.emit()
@@ -1147,8 +1164,11 @@ class SheetBoard(QtWidgets.QWidget):
             a.setCheckable(True)
             a.triggered.connect(lambda _c=False, k=key: c.set_tool(k))
             group.addAction(a)
-            tb.addAction(a)
             self.tool_actions[key] = a
+            if key == "shape":
+                tb.addWidget(self._shape_button(a))
+            else:
+                tb.addAction(a)
         tb.addSeparator()
 
         self.color_btn = QtWidgets.QToolButton()
@@ -1216,6 +1236,30 @@ class SheetBoard(QtWidgets.QWidget):
             a.setToolTip(tr("Write the strokes into the document and refresh the "
                             "image plane (also done when the board closes)"))
             a.triggered.connect(self.apply)
+
+    def _shape_button(self, action):
+        """One button for the shapes, with a drop-down menu; it shows and
+        reuses the last shape chosen."""
+        btn = QtWidgets.QToolButton(self)
+        btn.setDefaultAction(action)
+        btn.setPopupMode(QtWidgets.QToolButton.MenuButtonPopup)
+        menu = QtWidgets.QMenu(btn)
+        labels = {"circle": tr("Circle"), "ellipse": tr("Ellipse"),
+                  "rect": tr("Rectangle (Shift: square)"), "arc": tr("Arc")}
+        self.shape_actions = {}
+        for kind in ("circle", "ellipse", "rect", "arc"):
+            m = menu.addAction(QtGui.QIcon(icon(SHAPE_ICONS[kind])), labels[kind])
+            m.triggered.connect(lambda _c=False, k=kind: self.choose_shape(k))
+            self.shape_actions[kind] = m
+        btn.setMenu(menu)
+        self.shape_button = btn
+        return btn
+
+    def choose_shape(self, kind):
+        self.canvas.tool_settings["shape"]["kind"] = kind
+        self.tool_actions["shape"].setIcon(QtGui.QIcon(icon(SHAPE_ICONS[kind])))
+        self.canvas.set_tool("shape")
+        self._sync_settings()
 
     def _sync_tool(self, key):
         a = self.tool_actions.get(key)

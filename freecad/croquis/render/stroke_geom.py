@@ -443,3 +443,113 @@ def arrow_head(tip, direction, length, style="open", spread_deg=24.0):
     if style == "filled":
         return "polygon", [tuple(tip[:2]), left, right]
     return "lines", [left, tuple(tip[:2]), right]
+
+
+# ----------------------------------------------------------------------
+#  Styled shapes (circle, ellipse, rectangle, arc)
+# ----------------------------------------------------------------------
+SHAPES = ("circle", "ellipse", "rect", "arc")
+_K = 0.5522847498            # Bezier handle length of a quarter circle
+
+
+def shape_box(kind, x0, y0, x1, y1, constrain):
+    """Box (x0, y0, x1, y1) of a dragged shape: a circle (and a square or
+    a constrained ellipse) keeps equal sides."""
+    if kind == "circle" or (constrain and kind in ("rect", "ellipse")):
+        side = max(abs(x1 - x0), abs(y1 - y0))
+        x1 = x0 + math.copysign(side, (x1 - x0) or 1.0)
+        y1 = y0 + math.copysign(side, (y1 - y0) or 1.0)
+    return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
+
+
+def shape_chain(kind, x0, y0, x1, y1, constrain=False):
+    """Bezier chain of a shape dragged from (x0, y0) to (x1, y1):
+    circle / ellipse / rect inscribed in the box (closed, starting at the
+    top), arc from the press to the release point, bulging by a third of
+    the chord (constrain: a half circle)."""
+    if kind == "arc":
+        dx, dy = x1 - x0, y1 - y0
+        chord = math.hypot(dx, dy)
+        if chord < 1e-9:
+            return line_chain(x0, y0, x1, y1)
+        nx, ny = dy / chord, -dx / chord             # left of the chord, upwards on screen
+        sag = chord / 2.0 if constrain else chord / 3.0
+        r = (chord * chord / 4.0 + sag * sag) / (2.0 * sag)
+        mx, my = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+        cx, cy = mx + nx * (sag - r), my + ny * (sag - r)
+        a0 = math.atan2(y0 - cy, x0 - cx)
+        a1 = math.atan2(y1 - cy, x1 - cx)
+        sweep = a1 - a0
+        # the arc goes through the bulge point (mid + n * sag)
+        bx, by = mx + nx * sag, my + ny * sag
+        ab = math.atan2(by - cy, bx - cx)
+        if not _between(a0, ab, sweep):
+            sweep = sweep - math.copysign(2 * math.pi, sweep)
+        return arc_chain(cx, cy, r, r, a0, sweep)
+    bx0, by0, bx1, by1 = shape_box(kind, x0, y0, x1, y1, constrain)
+    if kind == "rect":
+        corners = [(bx0, by0), (bx1, by0), (bx1, by1), (bx0, by1), (bx0, by0)]
+        out = [corners[0]]
+        for a, b in zip(corners, corners[1:]):
+            out.extend(line_chain(a[0], a[1], b[0], b[1])[1:])
+        return out
+    cx, cy = (bx0 + bx1) / 2.0, (by0 + by1) / 2.0
+    return arc_chain(cx, cy, (bx1 - bx0) / 2.0, (by1 - by0) / 2.0, -math.pi / 2, 2 * math.pi)
+
+
+def _between(a0, a, sweep):
+    d = (a - a0) % (2 * math.pi)
+    return d <= sweep if sweep >= 0 else (2 * math.pi - d) <= -sweep
+
+
+def arc_chain(cx, cy, rx, ry, a0, sweep):
+    """Bezier chain of an elliptic arc (angle a0, signed sweep, radians)."""
+    n = max(1, int(math.ceil(abs(sweep) / (math.pi / 2) - 1e-9)))
+    step = sweep / n
+    k = 4.0 / 3.0 * math.tan(step / 4.0)
+    out = [(cx + rx * math.cos(a0), cy + ry * math.sin(a0))]
+    a = a0
+    for _i in range(n):
+        b = a + step
+        out.append((cx + rx * (math.cos(a) - k * math.sin(a)),
+                    cy + ry * (math.sin(a) + k * math.cos(a))))
+        out.append((cx + rx * (math.cos(b) + k * math.sin(b)),
+                    cy + ry * (math.sin(b) - k * math.cos(b))))
+        out.append((cx + rx * math.cos(b), cy + ry * math.sin(b)))
+        a = b
+    return out
+
+
+def hand_drawn(chain, closed, amount=1.0, seed=1):
+    """A chain made to look drawn by hand: anchors moved a little (smooth,
+    deterministic for a given seed and shape) and, for a closed shape, an
+    overshoot past the start. amount 0 returns the chain unchanged."""
+    if amount <= 0 or len(chain) < 4:
+        return list(chain)
+    import random
+    rnd = random.Random(seed)
+    xs = [p[0] for p in chain]
+    ys = [p[1] for p in chain]
+    size = max(max(xs) - min(xs), max(ys) - min(ys), 1.0)
+    jit = 0.012 * size * amount
+    out = list(chain)
+    for i in range(0, len(out), 3):
+        dx, dy = rnd.uniform(-jit, jit), rnd.uniform(-jit, jit)
+        if closed and i == len(out) - 1:
+            dx, dy = dx * 0.5, dy * 0.5
+        for j in (i - 1, i, i + 1):         # an anchor and its handles move together
+            if 0 <= j < len(out):
+                out[j] = (out[j][0] + dx, out[j][1] + dy)
+    if closed:
+        # overshoot: continue a little along the first segment
+        p0, p1, p2, p3 = out[0], out[1], out[2], out[3]
+        t = 0.25 * amount
+        q1 = _lerp(p0, p1, t)
+        q2 = _lerp(q1, _lerp(p1, p2, t), t)
+        q3 = _bez(p0, p1, p2, p3, t)
+        out.extend([_lerp(out[-1], q1, 0.33), q2, q3])
+    return out
+
+
+def _lerp(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)

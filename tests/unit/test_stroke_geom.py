@@ -207,3 +207,51 @@ def test_arrow_head_open_and_filled(direction):
     assert kind == "polygon" and poly[0] == tip and len(poly) == 3
     kind, (centre, radius) = g.arrow_head(tip, direction, 6.0, "dot")
     assert kind == "dot" and centre == tip and radius == pytest.approx(2.0)
+
+
+# ----------------------------------------------------------------------
+#  Styled shapes
+# ----------------------------------------------------------------------
+def chain_points(chain):
+    return g.sample_chain(chain, 0.2)
+
+
+def test_circle_and_ellipse():
+    chain = g.shape_chain("circle", 10, 10, 50, 30)        # circle: equal sides
+    pts = chain_points(chain)
+    cx, cy, r = 30, 30, 20
+    assert max(abs(math.hypot(x - cx, y - cy) - r) for x, y, _t in pts) < 0.03
+    assert pts[0][:2] == pytest.approx((30, 10))           # starts at the top
+    e = chain_points(g.shape_chain("ellipse", 0, 0, 40, 20))
+    assert max(abs(((x - 20) / 20) ** 2 + ((y - 10) / 10) ** 2 - 1) for x, y, _t in e) < 0.01
+    sq = g.shape_chain("ellipse", 0, 0, 40, 20, constrain=True)
+    assert max(p[1] for p in chain_points(sq)) == pytest.approx(40, abs=0.05)
+
+
+def test_rect_and_square():
+    chain = g.shape_chain("rect", 5, 5, 25, 15)
+    assert chain[0] == (5, 5) and chain[-1] == (5, 5)
+    assert len(chain) == 13                                  # four straight segments
+    xs, ys = [p[0] for p in chain], [p[1] for p in chain]
+    assert (min(xs), max(xs), min(ys), max(ys)) == (5, 25, 5, 15)
+    sq = g.shape_chain("rect", 5, 5, 25, 15, constrain=True)
+    assert max(p[1] for p in sq) == 25
+
+
+def test_arc():
+    chain = g.shape_chain("arc", 0, 0, 40, 0)
+    assert chain[0] == pytest.approx((0, 0)) and chain[-1] == pytest.approx((40, 0))
+    pts = chain_points(chain)
+    assert min(y for _x, y, _t in pts) == pytest.approx(-40 / 3, abs=0.05)   # bulge
+    half = chain_points(g.shape_chain("arc", 0, 0, 40, 0, constrain=True))
+    assert min(y for _x, y, _t in half) == pytest.approx(-20, abs=0.05)
+
+
+def test_hand_drawn_is_small_deterministic_and_overshoots():
+    chain = g.shape_chain("circle", 0, 0, 40, 40)
+    a = g.hand_drawn(chain, True, seed=3)
+    assert a == g.hand_drawn(chain, True, seed=3)
+    assert len(a) == len(chain) + 3                          # overshoot past the start
+    for p, q in zip(chain, a):
+        assert math.hypot(p[0] - q[0], p[1] - q[1]) < 0.012 * 40 * 3
+    assert g.hand_drawn(chain, True, amount=0) == chain

@@ -885,6 +885,80 @@ class EditTool(Tool):
 
 
 # ----------------------------------------------------------------------
+#  Styled shapes
+# ----------------------------------------------------------------------
+class ShapeTool(Tool):
+    """Circle, ellipse, rectangle or arc, drawn with the last drawing tool
+    (its colour, size, opacity, pressure look) with a slight hand-drawn
+    look: drag to draw, Shift for a circle / square / half circle, Escape
+    cancels. The result is an ordinary stroke (undo, erasers, exports)."""
+
+    show_size = False
+
+    def __init__(self, canvas, key):
+        Tool.__init__(self, canvas, key)
+        self.start = None
+        self.preview = VectorPreview(canvas)
+
+    @property
+    def busy(self):
+        return self.start is not None
+
+    def press(self, pos, pressure, mods):
+        self.start = self.c.to_mm(pos)
+        self.seed = int(time.monotonic() * 1000) % 100000
+
+    def stroke_for(self, x0, y0, x1, y1, constrain):
+        c = self.c
+        st = c.tool_settings["shape"]
+        brush = c.last_brush
+        bs = c.tool_settings[brush]
+        t = model.TOOLS[brush]
+        kind = st["kind"]
+        chain = geom.shape_chain(kind, x0, y0, x1, y1, constrain)
+        if st["hand"]:
+            chain = geom.hand_drawn(chain, kind != "arc", seed=self.seed)
+        if t["kind"] == "vector":
+            keys = model.DEFAULT_ARROW if brush == "arrow" else model.DEFAULT_PROFILE
+            return model.Stroke(brush, bs["color"], bs["size"], bs["opacity"], t["layer"],
+                                [(x, y, 1.0) for x, y in chain],
+                                dict((k, bs[k]) for k in keys))
+        pts = [(x, y, 0.85) for x, y, _t in geom.sample_chain(chain, 0.5)]
+        if st["hand"] and len(pts) > 2:
+            pts = geom.taper_ends(pts, 2.0 + bs["size"], 3.0 + bs["size"], lowest=0.35)
+        return model.Stroke(brush, bs["color"], bs["size"], bs["opacity"], t["layer"], pts)
+
+    def move(self, pos, pressure, mods):
+        if self.start is None:
+            return
+        x, y = self.c.to_mm(pos)
+        self.preview.set(self.stroke_for(self.start[0], self.start[1], x, y, _shift(mods)))
+
+    def release(self, pos, pressure, mods):
+        if self.start is None:
+            return
+        self.move(pos, pressure, mods)
+        stroke = self.preview.stroke
+        (x0, y0), (x1, y1) = self.start, self.c.to_mm(pos)
+        self.cancel()
+        if stroke is not None and math.hypot(x1 - x0, y1 - y0) > 0.5:
+            self.c.undo_stack.push(undo.AddStroke(self.c, stroke))
+
+    def key(self, k, mods):
+        if k == int(QtCore.Qt.Key_Escape) and self.start is not None:
+            self.cancel()
+            return True
+        return False
+
+    def cancel(self):
+        self.start = None
+        self.preview.set(None)
+
+    def paint_sheet(self, painter):
+        self.preview.paint(painter)
+
+
+# ----------------------------------------------------------------------
 #  Text boxes
 # ----------------------------------------------------------------------
 class TextTool(Tool):
@@ -971,6 +1045,8 @@ def make_tool(canvas, key):
         return ScaleTool(canvas, key)
     if key == "text":
         return TextTool(canvas, key)
+    if key == "shape":
+        return ShapeTool(canvas, key)
     kind = model.tool_kind(key)
     if kind == "vector":
         straight = key == "line" or (key == "arrow" and
