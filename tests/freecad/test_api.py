@@ -255,3 +255,11 @@ def test_text_api(doc, sheet):
     assert (arr[:, :, 0] < 100).sum() > 50                   # the texts are in the image plane
     api.delete_text(n, t2["id"], doc=doc)
     assert api.get_sheet(n, doc=doc)["texts"] == 1
+
+
+def test_camera_plane_needs_gui(doc):
+    if App.GuiUp:
+        pytest.skip("headless check")
+    for kw in ({"plane": "camera"}, {"format": "view"}):
+        with pytest.raises(errors.GuiRequiredError):
+            api.create_sheet(doc, **kw)

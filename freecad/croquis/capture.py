@@ -214,10 +214,15 @@ class DrawStyle(object):
             vo = getattr(o, "ViewObject", None)
             if vo is None or not hasattr(vo, "DisplayMode") or not vo.Visibility:
                 continue
+            # the modes of a view provider: listDisplayModes() (getDisplayModes
+            # is a Python view provider method), or the property enumeration
             try:
-                modes = vo.getDisplayModes() if hasattr(vo, "getDisplayModes") else []
+                modes = vo.listDisplayModes()
             except Exception:
-                modes = []
+                try:
+                    modes = vo.getEnumerationsOfProperty("DisplayMode")
+                except Exception:
+                    modes = []
             if "Wireframe" not in modes:
                 continue
             saved = {"DisplayMode": vo.DisplayMode}
@@ -299,3 +304,21 @@ def camera_frame(camera_text, view_w, view_h):
     aspect = float(view_w) / float(view_h)
     vis_w, vis_h = (h * aspect, h) if aspect >= 1 else (h, h / aspect)
     return App.Placement(centre, rot), vis_w, vis_h
+
+
+def camera_sheet(doc, size=None):
+    """Placement and scale of a new sheet lying on the document's 3D view
+    (camera plane at the focal distance): (placement, (width, height) mm,
+    scale). size=None: the sheet takes the view's proportions (long side
+    297 mm); otherwise the given sheet is fitted on the view's height."""
+    view = view_3d(doc)
+    stop_animation(view)
+    w_px, h_px = view_size(view)
+    placement, vis_w, vis_h = camera_frame(view.getCamera(), w_px, h_px)
+    if size is None:
+        k = 297.0 / float(max(w_px, h_px))
+        size = (round(w_px * k, 2), round(h_px * k, 2))
+        scale = vis_w / size[0]
+    else:
+        scale = vis_h / size[1]
+    return placement, size, scale

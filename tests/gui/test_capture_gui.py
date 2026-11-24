@@ -143,3 +143,41 @@ def test_new_sheet_lies_on_the_captured_view(scene, camera_type):
     X, Y = int(sx / w * pw), int(sy / h * ph)
     patch = arr[max(0, Y - 3):Y + 4, max(0, X - 3):X + 4]
     assert blue_pixels(patch) > 0, (X, Y)
+
+
+def test_new_sheet_defaults_camera_view_guide(scene):
+    """The unified New sheet: size of the view, camera plane at scale,
+    transparent paper, wireframe guide."""
+    doc, view = scene
+    m = panels.NewSheetModel(doc)
+    for k, v in (("format", "view"), ("plane", "camera"), ("paper", "transparent"),
+                 ("background", "guide"), ("dpi", "72")):
+        assert m.set(k, v), m.error
+    assert m.accept(), m.error
+    info = m.created
+    obj = doc.getObject(info["name"])
+    w, h = capture.view_size(view)
+    assert info["width_mm"] / info["height_mm"] == pytest.approx(w / h, rel=0.01)
+    cam = view.getCameraOrientation()
+    q = obj.ImagePlane.Placement.Rotation.Q
+    assert max(abs(a - b) for a, b in zip(q, cam.Q)) < 1e-6 or \
+        max(abs(a + b) for a, b in zip(q, cam.Q)) < 1e-6
+    assert obj.Scale != 1.0 and info["underlay"]["mode"] == "plane"
+    guide = to_array(load(getattr(obj, "UnderlayImage")))
+    assert (guide[:, :, 0] < 110).sum() > 50                   # edges drawn
+    assert blue_pixels(guide) == 0                              # wireframe: no shaded face
+    plane = to_array(load(obj.ImagePlane.ImageFile))
+    assert plane[:, :, 3].max() == 0                            # guide never exported
+
+
+def test_new_sheet_picture_background(scene):
+    doc, view = scene
+    m = panels.NewSheetModel(doc, background="picture")
+    m.set("dpi", "72")
+    assert m.accept(), m.error
+    imgs = api.list_images(m.created["name"], doc=doc)
+    assert len(imgs) == 1 and imgs[0]["camera"] and imgs[0]["x"] == pytest.approx(0, abs=0.01)
+    m2 = panels.NewSheetModel(doc)
+    for k, v in (("format", "A5L"), ("plane", "XY"), ("background", "none"), ("dpi", "72")):
+        m2.set(k, v)
+    assert m2.accept() and m2.created["plane"] == "XY" and m2.created["underlay"] is None

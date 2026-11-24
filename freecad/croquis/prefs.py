@@ -33,10 +33,11 @@ PARAM_PATH = "User parameter:BaseApp/Preferences/Mod/Croquis"
 # key -> default value (its type selects the parameter accessor)
 DEFAULTS = {
     "Language": "auto",
-    "SheetFormat": "A4L",           # key of model.FORMATS
+    "SheetFormat": "view",          # "view" (3D view proportions) or a model.FORMATS key
     "SheetDpi": 150,
     "SheetPaper": "transparent",    # key of model.PAPERS
-    "SheetPlane": "XZ",             # XY / XZ / YZ
+    "SheetPlane": "camera",         # camera / XY / XZ / YZ
+    "SheetBackground": "guide",     # none / guide (3D wireframe, not exported) / picture
     "PressureCurve": 1.0,           # exponent applied to tablet pressure
     "MouseSpeedPressure": True,     # mouse: fast stroke = thinner, lighter
     "Smoothing": 4,                 # input stabilizer, 0 = raw input
@@ -94,12 +95,14 @@ def fill_sheet_combos(fmt, dpi, paper, plane):
     """Fill the combo boxes shared by the preference page and the
     "New sheet" dialog (data = stored key)."""
     from . import model
+    fmt.addItem(tr("Size of the 3D view"), "view")
     for key, label, _w, _h in model.FORMATS:
         fmt.addItem(tr_data(label), key)
     for value in model.DPIS:
         dpi.addItem(tr("{dpi} dpi").format(dpi=value), value)
     for key, label, _color in model.PAPERS:
         paper.addItem(tr_data(label), key)
+    plane.addItem(tr("Camera orientation"), "camera")
     plane.addItem(tr("XY (top)"), "XY")
     plane.addItem(tr("XZ (front)"), "XZ")
     plane.addItem(tr("YZ (side)"), "YZ")

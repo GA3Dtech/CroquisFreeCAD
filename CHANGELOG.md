@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
+- One way to create sheets: "New sketch sheet" defaults to the size of the
+  3D view, in the camera plane at scale, on transparent paper, with a 3D
+  wireframe guide as background (shown on the board, never exported); the
+  background can also be a capture of the 3D view or nothing. "Capture 3D
+  view" opens the same dialog with the capture preselected (with a board
+  open it still puts the capture on that board).
+- "Camera orientation" is a plane choice everywhere (New sheet, preferences,
+  API `plane="camera"`, sheets from the clipboard); API `format="view"`.
 - Croquis is a passive workbench: documentation and docstrings describe a
   generic Python API for scripts, macros and addons; no agent / MCP
   positioning. README mentions that an AI coding agent writes the code.
@@ -101,6 +109,9 @@ All notable changes to this project are documented here. The format follows
   the public API.
 
 ### Fixed
+- The "edges" and "wireframe" guide styles really switch shapes to
+  wireframe (the display modes were queried with the wrong method, so
+  faces stayed shaded).
 - The board's side panel could be dragged to zero width and looked lost:
   it can no longer collapse, a "Panel" button shows / hides it, the menu
   has "Show the Croquis panel", and editing a sheet again shows it.

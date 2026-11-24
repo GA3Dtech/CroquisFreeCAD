@@ -38,31 +38,43 @@ from .panel_model import Action, PanelModel, Param
 #  New sheet
 # ----------------------------------------------------------------------
 class NewSheetModel(PanelModel):
-    """Name, format, resolution, paper and plane of a new sheet. Defaults
-    from the preferences, remembered on OK; OK creates the sheet through
-    the API (one undo step)."""
+    """Name, format, resolution, paper, plane and background of a new sheet.
+    Defaults (preferences, remembered on OK): the size of the 3D view, in
+    the camera plane at scale, transparent paper, a 3D wireframe guide
+    (shown on the board, never exported). Background "picture" puts a
+    capture of the 3D view on the sheet (the former "view from 3D"). OK
+    creates everything through the API."""
 
-    def __init__(self, doc, open_board=True):
+    def __init__(self, doc, open_board=True, background=None):
         self.doc = doc
         self.open_board = open_board
         self.created = None
         self.v = {"label": tr("Sketch"), "format": prefs.get("SheetFormat"),
                   "dpi": str(prefs.get("SheetDpi")), "paper": prefs.get("SheetPaper"),
-                  "plane": prefs.get("SheetPlane")}
+                  "plane": prefs.get("SheetPlane"),
+                  "background": background or prefs.get("SheetBackground")}
 
         def field(name):
             return (lambda: self.v[name]), (lambda value: self.v.__setitem__(name, value))
         params = [
             Param("label", tr("Name:"), "text", *field("label")),
             Param("format", tr("Format:"), "choice", *field("format"),
-                  options=[(k, tr_data(label)) for k, label, _w, _h in model.FORMATS]),
+                  options=[("view", tr("Size of the 3D view"))] +
+                  [(k, tr_data(label)) for k, label, _w, _h in model.FORMATS]),
             Param("dpi", tr("Resolution:"), "choice", *field("dpi"),
                   options=[(str(d), tr("{dpi} dpi").format(dpi=d)) for d in model.DPIS]),
             Param("paper", tr("Paper:"), "choice", *field("paper"),
                   options=[(k, tr_data(label)) for k, label, _c in model.PAPERS]),
             Param("plane", tr("Image plane:"), "choice", *field("plane"),
-                  options=[("XY", tr("XY (top)")), ("XZ", tr("XZ (front)")),
-                           ("YZ", tr("YZ (side)"))]),
+                  options=[("camera", tr("Camera orientation")), ("XY", tr("XY (top)")),
+                           ("XZ", tr("XZ (front)")), ("YZ", tr("YZ (side)"))],
+                  tip=tr("Camera orientation: the sheet lies on the 3D view, at the right "
+                         "scale where the camera focuses")),
+            Param("background", tr("Background:"), "choice", *field("background"),
+                  options=[("guide", tr("3D wireframe guide (not exported)")),
+                           ("picture", tr("Capture of the 3D view")), ("none", tr("None"))],
+                  tip=tr("The guide can be shown, hidden or captured again at any time "
+                         "(layer panel, 3D guide button)")),
         ]
         # unknown stored preferences fall back on the first option
         for p in params[1:]:
@@ -79,10 +91,23 @@ class NewSheetModel(PanelModel):
         except Exception as exc:
             self.error = str(exc)
             return False
+        try:
+            if self.v["background"] == "guide":
+                info = api.capture_underlay(info["name"], style="edges", doc=self.doc)
+            elif self.v["background"] == "picture":
+                info = api.capture_3d_view(self.doc, target_sheet=info["name"],
+                                           fill=True)["sheet"]
+        except Exception as exc:        # the sheet exists: keep it, say why
+            import FreeCAD as App
+
+            from . import errors
+            if not isinstance(exc, errors.GuiRequiredError):
+                App.Console.PrintWarning("Croquis: background not captured (%s)\n" % exc)
         prefs.put("SheetFormat", self.v["format"])
         prefs.put("SheetDpi", int(self.v["dpi"]))
         prefs.put("SheetPaper", self.v["paper"])
         prefs.put("SheetPlane", self.v["plane"])
+        prefs.put("SheetBackground", self.v["background"])
         self.created = info
         return True
 

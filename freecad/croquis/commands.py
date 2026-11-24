@@ -154,10 +154,22 @@ def new_sheet_from_clipboard():
 
 
 def capture_3d_view():
-    """Capture dialog; a new sheet opens on its board."""
+    """With a board open: put a capture of the 3D view on it. Otherwise:
+    the New sheet dialog with the capture as background (same defaults:
+    size of the view, camera plane, scale)."""
     from . import panels, qml_host, sheet
     doc = App.ActiveDocument
-    m = panels.capture_model(doc, sheet.active_board())
+    board = sheet.active_board()
+    if board is None:
+        m = panels.NewSheetModel(doc, background="picture")
+        if not qml_host.run_dialog(m) or m.created is None:
+            return
+        obj = doc.getObject(m.created["name"])
+        Gui.Selection.clearSelection()
+        Gui.Selection.addSelection(obj)
+        sheet.open_board(obj)
+        return
+    m = panels.capture_model(doc, board)
     if not qml_host.run_dialog(m) or not m.result or "sheet" not in m.result:
         return
     obj = doc.getObject(m.result["sheet"]["name"])

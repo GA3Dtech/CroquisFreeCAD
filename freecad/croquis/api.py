@@ -324,35 +324,55 @@ def list_sheets(doc=None):
     return [_sheet_info(o) for o in _doc(doc).Objects if sheet_mod.is_sheet(o)]
 
 
+PLANES = ("XY", "XZ", "YZ", "camera")
+
+
 def create_sheet(doc=None, format="A4L", dpi=150, paper="transparent", plane="XZ",
                  placement=None, label=None, width_mm=None, height_mm=None):
-    """New sheet and its image plane. format: key of model.FORMATS, or
-    "custom" with width_mm and height_mm; plane: XY / XZ / YZ; placement:
-    optional FreeCAD Placement of the image plane (overrides plane).
-    Returns the sheet metadata."""
+    """New sheet and its image plane. format: key of model.FORMATS,
+    "custom" with width_mm and height_mm, or "view" (GUI: the proportions
+    of the 3D view, long side 297 mm); plane: XY / XZ / YZ, or "camera"
+    (GUI: in the camera plane at the focal distance, scaled so it lies on
+    the 3D view, true size where the camera focuses); placement: optional
+    FreeCAD Placement of the image plane (overrides plane). Returns the
+    sheet metadata."""
     from . import sheet as sheet_mod
     d = _doc(doc)
     size = None
     if format == "custom":
         size = (_num(width_mm, "width_mm", 10, 5000), _num(height_mm, "height_mm", 10, 5000))
-    elif format not in [k for k, _l, _w, _h in model.FORMATS]:
-        raise InvalidArgumentError("format must be one of %s or custom, got %r"
+    elif format != "view" and format not in [k for k, _l, _w, _h in model.FORMATS]:
+        raise InvalidArgumentError("format must be one of %s, custom or view, got %r"
                                    % (", ".join(k for k, _l, _w, _h in model.FORMATS), format))
     if isinstance(dpi, bool) or not isinstance(dpi, int) or not 10 <= dpi <= 1200:
         raise InvalidArgumentError("dpi must be an integer in [10, 1200], got %r" % (dpi,))
     if paper not in [k for k, _l, _c in model.PAPERS]:
         raise InvalidArgumentError("paper must be one of %s, got %r"
                                    % (", ".join(k for k, _l, _c in model.PAPERS), paper))
-    if plane not in sheet_mod.PLANES:
-        raise InvalidArgumentError("plane must be one of XY, XZ, YZ, got %r" % (plane,))
+    if plane not in PLANES:
+        raise InvalidArgumentError("plane must be one of XY, XZ, YZ, camera, got %r" % (plane,))
     if placement is not None and not isinstance(placement, App.Placement):
         raise InvalidArgumentError("placement must be a FreeCAD.Placement")
+    scale = None
+    if format == "view" or plane == "camera":
+        from . import capture
+        capture.require_gui()
+        fmt_size = size if size is not None else \
+            (None if format == "view" else model.format_size(format))
+        cam_placement, size, cam_scale = capture.camera_sheet(d, fmt_size)
+        if plane == "camera":
+            if placement is None:
+                placement = cam_placement
+            scale = cam_scale
     _ensure_qt()
 
     def run():
-        obj = sheet_mod.create_sheet(d, format, dpi, paper, plane, label, size=size)
+        obj = sheet_mod.create_sheet(d, format, dpi, paper,
+                                     "XZ" if plane == "camera" else plane, label, size=size)
         if placement is not None:
             obj.ImagePlane.Placement = placement
+        if scale is not None:
+            obj.Scale = scale
         return obj
     obj = _transaction(d, tr("New sketch sheet"), run)
     d.recompute()
@@ -625,19 +645,25 @@ def new_sheet_from_image(doc, path, plane="XY", dpi=150, paper="white", long_sid
     _check_sheet_args(dpi, paper, plane)
     k = long_side_mm / float(max(img.width(), img.height()))
     size = (round(img.width() * k, 2), round(img.height() * k, 2))
-    obj, e = _sheet_with_picture(d, img, path, size, dpi, paper, plane, label)
+    placement = None
+    if plane == "camera":
+        from . import capture
+        capture.require_gui()
+        placement = capture.camera_sheet(d, size)[0]
+        plane = "XZ"
+    obj, e = _sheet_with_picture(d, img, path, size, dpi, paper, plane, label,
+                                 placement=placement)
     return {"sheet": _sheet_info(obj), "image": _image_out(e)}
 
 
 def _check_sheet_args(dpi, paper, plane):
-    from . import sheet as sheet_mod
     if isinstance(dpi, bool) or not isinstance(dpi, int) or not 10 <= dpi <= 1200:
         raise InvalidArgumentError("dpi must be an integer in [10, 1200], got %r" % (dpi,))
     if paper not in [k for k, _l, _c in model.PAPERS]:
         raise InvalidArgumentError("paper must be one of %s, got %r"
                                    % (", ".join(k for k, _l, _c in model.PAPERS), paper))
-    if plane not in sheet_mod.PLANES:
-        raise InvalidArgumentError("plane must be one of XY, XZ, YZ, got %r" % (plane,))
+    if plane not in PLANES:
+        raise InvalidArgumentError("plane must be one of XY, XZ, YZ, camera, got %r" % (plane,))
 
 
 def list_images(sheet, doc=None):
@@ -804,7 +830,8 @@ def delete_text(sheet, text_id, doc=None):
 #  3D view capture (GUI)
 # ----------------------------------------------------------------------
 def capture_3d_view(doc=None, width_px=None, height_px=None, background="current",
-                    hide_sheets=True, target_sheet=None, factor=1.0, align="camera"):
+                    hide_sheets=True, target_sheet=None, factor=1.0, align="camera",
+                    fill=False):
     """GUI. Picture of the document's 3D view (never the board), put on a
     new sheet shaped like the view, or on target_sheet (fitted). The view's
     camera is kept with the picture (restore_image_view). background:
@@ -812,6 +839,8 @@ def capture_3d_view(doc=None, width_px=None, height_px=None, background="current
     during the capture. align (new sheet): "camera" places the sheet in the
     camera plane at the focal distance and scales it so it lies exactly on
     the captured view (true scale there); "plane" puts it on XZ, scale 1.
+    fill (target sheet): the picture fills the sheet instead of fitting
+    with a margin.
     Returns {"sheet": metadata, "image": element, "camera": camera}."""
     from . import capture
     capture.require_gui()
@@ -845,7 +874,7 @@ def capture_3d_view(doc=None, width_px=None, height_px=None, background="current
         temps = []
 
         def change(data):
-            e = image_element(data, img, None, camera=camera)
+            e = image_element(data, img, None, camera=camera, margin=0.0 if fill else 0.05)
             data.elements.append(e)
             temps.append(data.files[e.file])
             return e

@@ -11,9 +11,10 @@ pytestmark = pytest.mark.freecad
 
 def test_new_sheet_model_creates_through_api(doc):
     m = panels.new_sheet_model(doc)
-    assert [p.name for p in m.params] == ["label", "format", "dpi", "paper", "plane"]
+    assert [p.name for p in m.params] == ["label", "format", "dpi", "paper", "plane",
+                                         "background"]
     for name, value in (("label", "Front"), ("format", "A3P"), ("dpi", "72"),
-                        ("paper", "kraft"), ("plane", "YZ")):
+                        ("paper", "kraft"), ("plane", "YZ"), ("background", "none")):
         assert m.set(name, value), m.error
     assert not m.set("dpi", "73")           # not an option
     count = doc.UndoCount
