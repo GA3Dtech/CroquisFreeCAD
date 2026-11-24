@@ -587,16 +587,59 @@ class EditTool(Tool):
         self.selection = None
         self.drag = None        # (index or "all", start mm, original points)
         self.idrag = None       # image: (mode, start mm, original element)
+        self.sdrag = None       # shape: (handle, start mm, original definition)
         self.preview = VectorPreview(canvas)
         self.ipreview = None    # image element being dragged
 
     @property
     def busy(self):
-        return self.drag is not None or self.idrag is not None
+        return self.drag is not None or self.idrag is not None or self.sdrag is not None
 
     def _is_image(self, obj=None):
         obj = self.selection if obj is None else obj
         return getattr(obj, "kind", None) in ("image", "text")
+
+    def _shape(self, obj=None):
+        obj = self.selection if obj is None else obj
+        params = getattr(obj, "params", None)
+        return params.get("shape") if isinstance(params, dict) else None
+
+    def _pick_shape_handle(self, pos):
+        shape = self._shape()
+        if not shape:
+            return None
+        for name, p in shape_handles(shape):
+            w = self.c.to_widget(p)
+            if math.hypot(pos.x() - w.x(), pos.y() - w.y()) <= HANDLE_PX:
+                return name
+        return None
+
+    def _start_shape_drag(self, handle, pos):
+        c = self.c
+        sel = self.selection
+        self.sdrag = (handle, c.to_mm(pos), dict(self._shape()))
+        c.compositor.hidden.add(id(sel))
+        c.sheet_changed(c.compositor.refresh_strokes([sel]))
+        self.preview.set(sel.copy())
+
+    def _move_shape(self, pos):
+        handle, (x0, y0), orig = self.sdrag
+        x, y = self.c.to_mm(pos)
+        self.preview.set(reshape(self.selection, moved_shape(orig, handle, x - x0, y - y0,
+                                                             x, y)))
+        self.c.update()
+
+    def _release_shape(self, pos):
+        self._move_shape(pos)
+        sel, new = self.selection, self.preview.stroke
+        changed = new is not None and self._shape(new) != self._shape(sel)
+        self.sdrag = None
+        self.c.compositor.hidden.discard(id(sel))
+        self.preview.set(None)
+        if changed:
+            self.c.undo_stack.push(undo.ReplaceStroke(self.c, sel, new))
+        else:
+            self.c.sheet_changed(self.c.compositor.refresh_strokes([sel]))
 
     def _is_text(self, obj=None):
         obj = self.selection if obj is None else obj
@@ -711,6 +754,13 @@ class EditTool(Tool):
 
     def press(self, pos, pressure, mods):
         c = self.c
+        if self._shape():
+            handle = self._pick_shape_handle(pos)
+            if handle is None and c.pick_stroke(pos, kinds=None) is self.selection:
+                handle = "move"
+            if handle is not None:
+                self._start_shape_drag(handle, pos)
+                return
         if self._is_image():
             mode = self._pick_image_handle(pos)
             if mode is None and self.selection.contains(*c.to_mm(pos)):
@@ -718,14 +768,19 @@ class EditTool(Tool):
             if mode is not None:
                 self._start_image_drag(mode, pos)
                 return
-        index = self._pick_handle(pos) if not self._is_image() else None
+        index = self._pick_handle(pos) if not self._is_image() and not self._shape() \
+            else None
         if index is None:
             txt = c.pick_text(pos)
             if txt is not None:
                 self.select(txt)
                 self._start_image_drag("move", pos)
                 return
-            hit = c.pick_stroke(pos, kinds=("vector",))
+            hit = c.pick_stroke(pos, kinds=("vector",)) or c.pick_shape(pos)
+            if hit is not None and self._shape(hit):
+                self.select(hit)
+                self._start_shape_drag("move", pos)
+                return
             if hit is None:
                 img = c.pick_image(pos)
                 self.select(img)
@@ -741,6 +796,9 @@ class EditTool(Tool):
         self.preview.set(sel.copy())
 
     def move(self, pos, pressure, mods):
+        if self.sdrag is not None:
+            self._move_shape(pos)
+            return
         if self.idrag is not None:
             self._move_image(pos, mods)
             return
@@ -778,6 +836,9 @@ class EditTool(Tool):
         self.c.update()
 
     def release(self, pos, pressure, mods):
+        if self.sdrag is not None:
+            self._release_shape(pos)
+            return
         if self.idrag is not None:
             self._release_image(pos, mods)
             return
@@ -802,6 +863,12 @@ class EditTool(Tool):
         self.preview.set(None)
 
     def cancel(self):
+        if self.sdrag is not None:
+            sel = self.selection
+            self.sdrag = None
+            self.c.compositor.hidden.discard(id(sel))
+            self.preview.set(None)
+            self.c.sheet_changed(self.c.compositor.refresh_strokes([sel]))
         if self.idrag is not None:
             sel = self.selection
             self._end_image_drag()
@@ -834,6 +901,23 @@ class EditTool(Tool):
             self.c.draw_element(painter, self.ipreview)
 
     def paint_overlay(self, painter):
+        shape = self._shape(self.preview.stroke if self.sdrag is not None else None) \
+            or self._shape()
+        if shape:
+            blue = QtGui.QColor(45, 123, 229)
+            handles = shape_handles(shape)
+            pts = [self.c.to_widget(p) for _n, p in handles]
+            painter.setBrush(QtCore.Qt.NoBrush)
+            painter.setPen(QtGui.QPen(blue, 1.2, QtCore.Qt.DashLine))
+            if shape["kind"] == "arc":
+                painter.drawLine(pts[0], pts[1])
+            else:
+                painter.drawPolygon(QtGui.QPolygonF(pts))
+            painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 1))
+            painter.setBrush(blue)
+            for p in pts:
+                painter.drawRect(QtCore.QRectF(p.x() - 4, p.y() - 4, 8, 8))
+            return
         if self._is_text():
             e = self.ipreview if self.ipreview is not None else self.selection
             x0, y0, x1, y1 = e.box()
@@ -887,6 +971,68 @@ class EditTool(Tool):
 # ----------------------------------------------------------------------
 #  Styled shapes
 # ----------------------------------------------------------------------
+def shape_stroke(brush, color, size, opacity, params, shape):
+    """Stroke of a styled shape drawn with `brush`. The shape's definition
+    is kept in params["shape"] (kind, box or arc ends, constraint, hand
+    look, seed) so the edit tool can reshape it later. With the arrow as
+    brush the shape is a plain vector line (no heads)."""
+    if brush == "arrow":
+        brush = "line"
+        params = {"peak": 0.5, "tin": 0.0, "tout": 0.0}
+    t = model.TOOLS[brush]
+    kind = shape["kind"]
+    chain = geom.shape_chain(kind, shape["x0"], shape["y0"], shape["x1"], shape["y1"],
+                             shape.get("constrain", False))
+    if shape.get("hand"):
+        chain = geom.hand_drawn(chain, kind != "arc", seed=shape.get("seed", 1))
+    if t["kind"] == "vector":
+        q = dict(model.DEFAULT_PROFILE)
+        q.update(dict((k, v) for k, v in params.items() if k in model.DEFAULT_PROFILE))
+        q["shape"] = dict(shape)
+        return model.Stroke(brush, color, size, opacity, t["layer"],
+                            [(x, y, 1.0) for x, y in chain], q)
+    pts = [(x, y, 0.85) for x, y, _t in geom.sample_chain(chain, 0.5)]
+    if shape.get("hand") and len(pts) > 2:
+        pts = geom.taper_ends(pts, 2.0 + size, 3.0 + size, lowest=0.35)
+    return model.Stroke(brush, color, size, opacity, t["layer"], pts, {"shape": dict(shape)})
+
+
+def reshape(stroke, shape):
+    """The same shape stroke with a new definition (edit tool)."""
+    params = dict((k, v) for k, v in stroke.params.items() if k != "shape")
+    return shape_stroke(stroke.tool, stroke.color, stroke.size, stroke.opacity, params, shape)
+
+
+def shape_handles(shape):
+    """Handles of a shape in mm: [(name, (x, y))]: the four corners of its
+    box, or the two ends of an arc."""
+    if shape["kind"] == "arc":
+        return [("a", (shape["x0"], shape["y0"])), ("b", (shape["x1"], shape["y1"]))]
+    x0, y0, x1, y1 = geom.shape_box(shape["kind"], shape["x0"], shape["y0"], shape["x1"],
+                                    shape["y1"], shape.get("constrain", False))
+    return [("tl", (x0, y0)), ("tr", (x1, y0)), ("br", (x1, y1)), ("bl", (x0, y1))]
+
+
+def moved_shape(shape, handle, dx, dy, x, y):
+    """Shape definition after dragging a handle (or "move") to (x, y)."""
+    s = dict(shape)
+    if handle == "move":
+        for k in ("x0", "x1"):
+            s[k] += dx
+        for k in ("y0", "y1"):
+            s[k] += dy
+    elif handle == "a":
+        s["x0"], s["y0"] = x, y
+    elif handle == "b":
+        s["x1"], s["y1"] = x, y
+    else:
+        corners = dict(shape_handles(shape))
+        opposite = {"tl": "br", "br": "tl", "tr": "bl", "bl": "tr"}[handle]
+        fx, fy = corners[opposite]
+        s["x0"], s["y0"], s["x1"], s["y1"] = fx, fy, x, y
+    return s
+
+
 class ShapeTool(Tool):
     """Circle, ellipse, rectangle or arc, drawn with the last drawing tool
     (its colour, size, opacity, pressure look) with a slight hand-drawn
@@ -913,20 +1059,10 @@ class ShapeTool(Tool):
         st = c.tool_settings["shape"]
         brush = c.last_brush
         bs = c.tool_settings[brush]
-        t = model.TOOLS[brush]
-        kind = st["kind"]
-        chain = geom.shape_chain(kind, x0, y0, x1, y1, constrain)
-        if st["hand"]:
-            chain = geom.hand_drawn(chain, kind != "arc", seed=self.seed)
-        if t["kind"] == "vector":
-            keys = model.DEFAULT_ARROW if brush == "arrow" else model.DEFAULT_PROFILE
-            return model.Stroke(brush, bs["color"], bs["size"], bs["opacity"], t["layer"],
-                                [(x, y, 1.0) for x, y in chain],
-                                dict((k, bs[k]) for k in keys))
-        pts = [(x, y, 0.85) for x, y, _t in geom.sample_chain(chain, 0.5)]
-        if st["hand"] and len(pts) > 2:
-            pts = geom.taper_ends(pts, 2.0 + bs["size"], 3.0 + bs["size"], lowest=0.35)
-        return model.Stroke(brush, bs["color"], bs["size"], bs["opacity"], t["layer"], pts)
+        shape = {"kind": st["kind"], "x0": x0, "y0": y0, "x1": x1, "y1": y1,
+                 "constrain": bool(constrain), "hand": bool(st["hand"]), "seed": self.seed}
+        params = dict((k, bs[k]) for k in model.DEFAULT_PROFILE if k in bs)
+        return shape_stroke(brush, bs["color"], bs["size"], bs["opacity"], params, shape)
 
     def move(self, pos, pressure, mods):
         if self.start is None:

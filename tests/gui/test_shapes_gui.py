@@ -77,3 +77,67 @@ def test_shift_escape_and_menu_memory(board):
     assert len(c.sheet.strokes) == n - 1                 # whole-stroke eraser removes it
     sheet.close_board(obj)
     assert api.get_sheet(obj, doc=obj.Document)["strokes"] == n - 1
+
+
+def test_shape_after_arrow_has_no_heads(board):
+    _obj, b = board
+    c = b.canvas
+    c.set_tool("arrow")
+    b.choose_shape("rect")
+    a, z = c.to_widget((30, 30)), c.to_widget((100, 80))
+    drag(c, [(a.x(), a.y()), (z.x(), z.y())])
+    s = c.sheet.strokes[-1]
+    assert s.tool == "line" and "head_end" not in s.params
+    assert s.params["shape"]["kind"] == "rect"
+    assert s.color == c.tool_settings["arrow"]["color"]
+
+
+@pytest.mark.parametrize("brush", ["marker", "pencil", "spline"])
+def test_edit_tool_reshapes_shapes(board, brush):
+    QtCore, _g, _w, _t = qt()
+    _obj, b = board
+    c = b.canvas
+    c.set_tool(brush)
+    b.choose_shape("rect")
+    c.tool_settings["shape"]["hand"] = False
+    a, z = c.to_widget((30, 30)), c.to_widget((90, 70))
+    drag(c, [(a.x(), a.y()), (z.x(), z.y())])
+    rect = c.sheet.strokes[-1]
+    c.set_tool("edit")
+    edge = c.to_widget((60, 30))                         # click the top side
+    drag(c, [(edge.x(), edge.y()), (edge.x(), edge.y())])
+    assert c.selection() is rect
+    corner = c.to_widget((90, 70))                       # drag the bottom right corner
+    target = c.to_widget((130, 100))
+    drag(c, [(corner.x(), corner.y()), (target.x(), target.y())])
+    big = c.sheet.strokes[-1]
+    sh = big.params["shape"]
+    assert big is not rect and big.tool == brush
+    assert (min(sh["x0"], sh["x1"]), max(sh["x0"], sh["x1"])) == pytest.approx((30, 130), abs=0.5)
+    xs = [p[0] for p in big.points]
+    assert max(xs) == pytest.approx(130, abs=0.6)
+    mid = c.to_widget((80, 30))                          # move the whole shape
+    drag(c, [(mid.x(), mid.y()), (mid.x() + 40, mid.y())])
+    moved = c.sheet.strokes[-1].params["shape"]
+    assert min(moved["x0"], moved["x1"]) > 35
+    key(c, QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
+    key(c, QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
+    assert c.sheet.strokes[-1].params["shape"] == rect.params["shape"]
+
+
+def test_arc_ends_editable(board):
+    _obj, b = board
+    c = b.canvas
+    c.set_tool("grease")
+    b.choose_shape("arc")
+    a, z = c.to_widget((30, 80)), c.to_widget((110, 80))
+    drag(c, [(a.x(), a.y()), (z.x(), z.y())])
+    c.set_tool("edit")
+    top = c.to_widget((70, 80 - 80 / 3))                 # the bulge of the arc
+    drag(c, [(top.x(), top.y()), (top.x(), top.y())])
+    end = c.to_widget((110, 80))
+    new_end = c.to_widget((150, 60))
+    drag(c, [(end.x(), end.y()), (new_end.x(), new_end.y())])
+    sh = c.sheet.strokes[-1].params["shape"]
+    assert (sh["x1"], sh["y1"]) == pytest.approx((150, 60), abs=0.5)
+    assert (sh["x0"], sh["y0"]) == pytest.approx((30, 80), abs=0.5)

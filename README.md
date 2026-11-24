@@ -90,7 +90,7 @@ picture.
 | `L` | Straight line | Lines | Tapered vector line, drag from end to end; `Shift` snaps to 15°. |
 | `S` | Spline stroke | Lines | Thin, wide in the middle, pointed. *Freehand* is smoothed into Bezier curves; *Control points*: click the points, click the last one again (or double-click, `Enter`, right-click) to finish, `Backspace` removes the last point, `Esc` cancels. |
 | `A` | Arrow | Lines | Straight (drag tail to tip, `Shift` 15°) or curved (freehand or control points); heads at the end and / or start, open, filled or dot; editable with `V`. |
-| `O` | Shapes | (of the drawing tool) | Circle, ellipse, rectangle or arc from one drop-down button (the last shape is kept): drag to draw, `Shift` for circle / square / half circle, `Esc` cancels; drawn with the last drawing tool, slightly hand-drawn. |
+| `O` | Shapes | (of the drawing tool) | Circle, ellipse, rectangle or arc from one drop-down button (the last shape is kept): drag to draw, `Shift` for circle / square / half circle, `Esc` cancels; drawn with the last drawing tool, slightly hand-drawn; reshape it with `V` (corners, arc ends, move). |
 | `T` | Text box | Lines | Click to write (Escape or a click elsewhere validates, double-click to edit); font, size, bold, italic, colour, alignment, wrap width, frame, white background and callout arrow in the text panel; with `V`, drag the box, its width handle or the callout tip. |
 | `K` | Scale | – | Drag over something of known size and type its real length: the sheet takes the right size in 3D (shown as "3D scale 1:n"). |
 | `E` | Eraser | All or one | *Soft* removes pixels; *Whole strokes* deletes every stroke it touches. |

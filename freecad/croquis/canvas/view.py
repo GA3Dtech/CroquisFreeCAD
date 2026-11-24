@@ -663,6 +663,12 @@ class SheetCanvas(QtWidgets.QWidget):
         else:
             event.ignore()
 
+    def pick_shape(self, pos):
+        """Topmost styled shape under the position (any brush)."""
+        s = self.pick_stroke(pos)
+        return s if s is not None and isinstance(s.params, dict) and s.params.get("shape") \
+            else None
+
     def pick_stroke(self, pos, kinds=None):
         """Topmost visible stroke under the widget position (or None)."""
         x, y = self.to_mm(pos)
