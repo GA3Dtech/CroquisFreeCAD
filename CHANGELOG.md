@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-24
+
 ### Fixed
 - A shape drawn right after the arrow tool came out with arrow heads: with
   the arrow as last drawing tool, shapes are plain vector lines.
@@ -14,10 +16,6 @@ All notable changes to this project are documented here. The format follows
 - Shapes can be reshaped with the edit tool (V): drag a corner of the box,
   the ends of an arc, or the whole shape; the shape is redrawn with its
   brush and hand-drawn look (raster and vector shapes alike).
-
-## [0.3.0] - 2026-11-24
-
-### Added
 - PDF export (board button, "Export sheets as PDF" for the selection, API
   `export_pdf`): a page per sheet at its size in mm; line, spline and arrow
   strokes and texts are vector graphics, pencil / marker layers, pictures
