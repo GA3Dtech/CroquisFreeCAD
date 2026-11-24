@@ -101,6 +101,9 @@ All notable changes to this project are documented here. The format follows
   the public API.
 
 ### Fixed
+- The board's side panel could be dragged to zero width and looked lost:
+  it can no longer collapse, a "Panel" button shows / hides it, the menu
+  has "Show the Croquis panel", and editing a sheet again shows it.
 - Headless use (API in `freecadcmd`) on a
   machine without display no longer aborts with FreeCAD 1.1: Qt is forced
   to its offscreen platform there (the 1.1 AppImage launcher imposes xcb).

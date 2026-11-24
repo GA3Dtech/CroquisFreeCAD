@@ -13,6 +13,8 @@ compares the texts with freecad/croquis/translations/*.json.
                                            # every file, drop unused ones
     python3 tools/i18n.py new <code>       # create translations/<code>.json
     python3 tools/i18n.py export <file>    # write the English source texts
+    python3 tools/i18n.py merge <file>     # fill empty entries from a JSON file
+                                           # {"English": {"fr": "...", ...}}
 
 An empty entry falls back to English at run time: translators fill the
 values, keep the {named} fields and the HTML tags as they are.
@@ -139,6 +141,19 @@ def main(argv):
             return 1
         save(path, dict([("_language", argv[2])] + [(t, "") for t in texts]))
         print("%s created" % path)
+        return 0
+    if cmd == "merge" and len(argv) > 2:
+        incoming = load(argv[2])
+        for path in language_files():
+            data = load(path)
+            code = data.get("_language") or os.path.basename(path)[:-5]
+            n = 0
+            for text, by_lang in incoming.items():
+                if text in data and not data[text] and by_lang.get(code):
+                    data[text] = by_lang[code]
+                    n += 1
+            save(path, data)
+            print("%s: %d entr%s filled" % (os.path.basename(path), n, "y" if n == 1 else "ies"))
         return 0
     if cmd == "export" and len(argv) > 2:
         save(argv[2], list(texts))

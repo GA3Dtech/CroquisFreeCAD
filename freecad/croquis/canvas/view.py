@@ -1069,13 +1069,19 @@ class SheetBoard(QtWidgets.QWidget):
         self.status = QtWidgets.QLabel()
         self.status.setContentsMargins(6, 2, 6, 2)
 
+        # The side panel can be narrowed but never collapsed to nothing by
+        # dragging the splitter (it then looked lost); it is hidden and shown
+        # with the "Panel" button or the "Show the Croquis panel" command
         split = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
         split.addWidget(self.canvas)
         split.addWidget(self.side)
         split.setStretchFactor(0, 1)
         split.setStretchFactor(1, 0)
         split.setCollapsible(0, False)
+        split.setCollapsible(1, False)
+        self.side.setMinimumWidth(180)
         split.setSizes([1000, 240])
+        self.split = split
 
         lay = QtWidgets.QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -1186,6 +1192,12 @@ class SheetBoard(QtWidgets.QWidget):
         a.setToolTip(tr("Erase every stroke of the sheet (can be undone)"))
         a.triggered.connect(self._clear)
         tb.addSeparator()
+        self.panel_action = tb.addAction(QtGui.QIcon(icon("Panel.svg")), tr("Panel"))
+        self.panel_action.setCheckable(True)
+        self.panel_action.setChecked(True)
+        self.panel_action.setToolTip(tr("Show or hide the side panel (tool options, "
+                                        "paper, layers)"))
+        self.panel_action.toggled.connect(self.set_panel_visible)
         a = tb.addAction(QtGui.QIcon(icon("InsertImage.svg")), tr("Insert image…"))
         a.setToolTip(tr("Put a picture on the sheet (also Ctrl+V or drag and drop)"))
         a.triggered.connect(self.insert_image)
@@ -1250,6 +1262,23 @@ class SheetBoard(QtWidgets.QWidget):
             ratio = ("1:%g" % round(k, 3)) if k >= 1 else ("%g:1" % round(1 / k, 3))
             text += "   |   " + tr("3D scale {ratio}").format(ratio=ratio)
         self.status.setText(text)
+
+    def set_panel_visible(self, visible=True):
+        """Show / hide the side panel; showing it gives it back a usable
+        width."""
+        self.side.setVisible(bool(visible))
+        if visible:
+            sizes = self.split.sizes()
+            if len(sizes) == 2 and sizes[1] < self.side.minimumWidth():
+                total = sum(sizes)
+                self.split.setSizes([max(200, total - 240), 240])
+        if self.panel_action.isChecked() != bool(visible):
+            self.panel_action.blockSignals(True)
+            self.panel_action.setChecked(bool(visible))
+            self.panel_action.blockSignals(False)
+
+    def show_panel(self):
+        self.set_panel_visible(True)
 
     def guide_3d(self):
         from .. import panels, qml_host

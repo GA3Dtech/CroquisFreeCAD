@@ -433,6 +433,7 @@ def open_board(obj):
     if sub is not None:
         try:
             sub.mdiArea().setActiveSubWindow(sub)
+            sub.widget().show_panel()       # editing again brings the panel back
             sub.widget().canvas.setFocus()
             return sub.widget()
         except RuntimeError:        # deleted on the C++ side
@@ -481,6 +482,20 @@ def active_board():
         if s is sub:
             return s.widget()
     return None
+
+
+def show_panels():
+    """'Show the Croquis panel': the side panel of the active board (or of
+    every open board)."""
+    board = active_board()
+    boards = [board] if board is not None else \
+        [s.widget() for s in list(_boards.values())]
+    for b in boards:
+        try:
+            b.show_panel()
+        except RuntimeError:
+            pass
+    return len(boards)
 
 
 def board_of(obj):

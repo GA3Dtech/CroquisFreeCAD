@@ -232,3 +232,19 @@ def test_manual_plane_scale_survives_board_update(board):
     sheet.close_board(obj)                                    # update
     assert obj.Scale == pytest.approx(3.0)
     assert obj.ImagePlane.XSize.Value == pytest.approx(210 * 3)
+
+
+def test_side_panel_cannot_get_lost(board):
+    obj, b = board
+    total = sum(b.split.sizes())
+    b.split.moveSplitter(total, 1)                 # drag the handle to the edge
+    process()
+    assert b.split.sizes()[1] >= b.side.minimumWidth() and b.side.isVisibleTo(b)
+    b.panel_action.trigger()                        # hide with the button
+    assert not b.side.isVisibleTo(b)
+    Gui.runCommand("Croquis_ShowPanel")            # menu command brings it back
+    process()
+    assert b.side.isVisibleTo(b) and b.panel_action.isChecked()
+    b.set_panel_visible(False)
+    sheet.open_board(obj)                           # editing again shows it
+    assert b.side.isVisibleTo(b)

@@ -218,6 +218,11 @@ def register():
         ("Croquis_InsertImage", _Command(
             insert_image, "InsertImage.svg", tr("Insert image…"),
             tr("Put a picture file on the selected sheet"), needs=_one_sheet)),
+        ("Croquis_ShowPanel", _Command(
+            lambda: __import__("freecad.croquis.sheet", fromlist=["x"]).show_panels(),
+            "Panel.svg", tr("Show the Croquis panel"),
+            tr("Show the side panel of the drawing board (tool options, paper, layers)"),
+            needs_document=False)),
         ("Croquis_ExportPng", _Command(
             export_png, "ExportPng.svg", tr("Export sheet as PNG"),
             tr("Save the selected sheet as a PNG image (transparent where the paper is)"),
@@ -227,4 +232,5 @@ def register():
         Gui.addCommand(name, cmd)
     TOOLBAR[:] = [name for name, _c in cmds]
     MENU[:] = list(TOOLBAR)
+    TOOLBAR.remove("Croquis_ShowPanel")         # menu only
     CONTEXT[:] = ["Croquis_EditSheet", "Croquis_InsertImage", "Croquis_ExportPng"]
