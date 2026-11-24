@@ -2,8 +2,8 @@
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>Croquis</name>
   <description>Designer-style sketching for FreeCAD: pencil, marker and tapered spline strokes, rendered as translucent image planes.</description>
-  <version>0.2.0</version>
-  <date>2026-11-22</date>
+  <version>0.3.0</version>
+  <date>2026-11-24</date>
   <maintainer email="98849261+GA3Dtech@users.noreply.github.com">GA3Dtech</maintainer>
   <author>GA3Dtech</author>
   <license file="LICENSE">LGPL-2.1-or-later</license>

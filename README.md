@@ -19,7 +19,7 @@ Two main uses:
 
 ## Status
 
-Version 0.2.
+Version 0.3.
 
 | Feature | State |
 |---|---|
@@ -31,17 +31,25 @@ Version 0.2.
 | Paper (transparent, white, layout pad, tinted grey, kraft) and layer visibility / opacity | done |
 | Tablet pressure, pressure simulated from mouse speed, undo / redo | done |
 | Sheet stored in the document, linked image plane on XY / XZ / YZ, PNG export | done |
-| Pictures pasted (Ctrl+V), dropped or inserted, new sheet from the clipboard; move, resize, rotate, opacity, stacking | done (v0.3) |
-| Manual 3D view capture onto a new sheet or the open board, camera kept ("Back to this view") | done (v0.3) |
-| Arrows: straight or curved, heads at the start / end, open / filled / dot | done (v0.3) |
-| 3D view guide under the strokes, aligned on the sheet plane in true size, never exported | done (v0.3) |
-| Text boxes and callouts: font, size, bold, italic, colour, alignment, wrapping, frame, background | done (v0.3) |
-| Scale tool (real length of a segment), sheets from a 3D view placed on the view at scale | done (v0.3) |
+| Pictures pasted (Ctrl+V), dropped or inserted, new sheet from the clipboard; move, resize, rotate, opacity, stacking | done |
+| Manual 3D view capture onto a new sheet or the open board, camera kept ("Back to this view") | done |
+| Arrows: straight or curved, heads at the start / end, open / filled / dot | done |
+| 3D view guide under the strokes, aligned on the sheet plane in true size, never exported | done |
+| Text boxes and callouts: font, size, bold, italic, colour, alignment, wrapping, frame, background | done |
+| Scale tool (real length of a segment), sheets from a 3D view placed on the view at scale | done |
 | Camera-aligned guide for an existing sheet | next |
-| Styled shapes (circle, ellipse, rectangle, arc) | done (v0.3) |
+| Styled shapes (circle, ellipse, rectangle, arc) | done |
 | SVG export, TechDraw, chisel tip, custom palettes | v0.4 |
 
 The full design (in French) is in [docs/specification_fr.md](docs/specification_fr.md).
+
+### Files open without Croquis
+
+Every file written by Croquis opens in a plain FreeCAD, without the addon:
+the sketches are ordinary image planes holding their last render (strokes,
+pictures, texts), exactly like imported pictures. Only editing needs
+Croquis. This is checked by the test suite (`tests/vanilla`) on every
+change, on FreeCAD 1.1, 26.3 and 27.1.
 
 ## Installation
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
 # Tooling configuration only: Croquis is installed as a FreeCAD addon
 # (package.xml), not as a Python package.
 
