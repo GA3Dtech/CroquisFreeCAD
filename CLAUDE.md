@@ -51,6 +51,13 @@ FreeCAD restart.
 
 ## Code conventions
 
+- **Croquis is a passive workbench, not an MCP and must never become one.**
+  No server, bridge, network listener, AI client or remote call; nothing runs
+  at import or startup beyond registering the workbench. It only exposes the
+  Python API (`api.py`), generic (scripts, macros, addons). Agent-side code
+  (MCP servers, prompts, bridges) never enters the repository
+  (`tests/unit/test_passive.py` guards it).
+
 - Every file starts with the `# -*- coding: utf-8 -*-` line, the
   `SPDX-License-Identifier: LGPL-2.1-or-later` line and the license header.
 - PySide import pattern: `from PySide import ...` with a `PySide6` fallback.
@@ -143,7 +150,7 @@ the feel of drawing can only be checked by hand: say so explicitly.
   `build_fixtures.py`. Format changes go through `model.FORMAT_VERSION` + a
   tested migration in `model.MIGRATIONS`; legacy files must keep opening.
 - Never test on the user's open documents: work on copies in a temporary
-  folder (also through the FreeCAD MCP server) and close them.
+  folder (whatever tool drives FreeCAD) and close them.
 
 ## Releases and git
 

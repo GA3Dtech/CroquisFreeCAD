@@ -17,7 +17,7 @@
 # along with this library; if not, see <https://www.gnu.org/licenses/>.
 """
 errors.py (Croquis) - exceptions raised by the public API (api.py), so
-that scripts and agents can tell a missing document from a bad stroke.
+that scripts and addons can tell a missing document from a bad stroke.
 Messages are English and stable (they are part of the API contract).
 """
 

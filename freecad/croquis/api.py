@@ -16,9 +16,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with this library; if not, see <https://www.gnu.org/licenses/>.
 """
-api.py (Croquis) - the stable public API, for scripts and agents (for
-example through the FreeCAD MCP server: execute_code in a running FreeCAD,
-execute_code_headless in freecadcmd).
+api.py (Croquis) - the stable public API, for scripts, macros and other
+addons, in the GUI or in freecadcmd. Plain Python: no server, no network.
 
     from freecad.croquis import api
     s = api.create_sheet("MyDoc", format="A5L", plane="XZ")

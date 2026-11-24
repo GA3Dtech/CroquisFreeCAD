@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Croquis is a passive workbench: documentation and docstrings describe a
+  generic Python API for scripts, macros and addons; no agent / MCP
+  positioning. README mentions that an AI coding agent writes the code.
+
 ### Added
 - Development tooling: `pyproject.toml` (ruff, pytest markers),
   `.pre-commit-config.yaml`, `.gitattributes`.
@@ -76,14 +81,14 @@ All notable changes to this project are documented here. The format follows
   `format="custom"` with `width_mm` / `height_mm`.
 - Public API `freecad.croquis.api` (sheets, strokes, layers, paper,
   PNG rendering, `describe()`) with typed errors (`errors.py`), documented
-  in `docs/api.md`, for scripts and agents through the FreeCAD MCP server.
+  in `docs/api.md`, for scripts, macros and other addons.
 
 ### Changed
 - Supported FreeCAD versions: 1.1.x, 26.3 and 27.1 (development); 1.0 is
   dropped (`freecadmin` 1.1.0). The CI tests 1.1.4, 26.3rc2 and a 27.1
   weekly build.
-- Known limitation: a file saved WITHOUT the GUI (headless API, MCP
-  `execute_code_headless`) has no GUI data; FreeCAD 1.1 then opens its image
+- Known limitation: a file saved WITHOUT the GUI (API in `freecadcmd`)
+  has no GUI data; FreeCAD 1.1 then opens its image
   plane hidden when the addon is absent (26.3 and later show it). Files
   saved from the GUI are not affected.
 - New sheets go into one "Croquis" group of the document instead of
@@ -96,7 +101,7 @@ All notable changes to this project are documented here. The format follows
   the public API.
 
 ### Fixed
-- Headless use (API in `freecadcmd`, MCP `execute_code_headless`) on a
+- Headless use (API in `freecadcmd`) on a
   machine without display no longer aborts with FreeCAD 1.1: Qt is forced
   to its offscreen platform there (the 1.1 AppImage launcher imposes xcb).
 - "Back to this view", captures and the 3D guide stop a running camera

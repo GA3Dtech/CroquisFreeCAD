@@ -1,6 +1,7 @@
 # Croquis public API
 
-`freecad.croquis.api` is the stable entry point for scripts and agents
+`freecad.croquis.api` is the stable entry point for scripts, macros and
+other addons
 (`API_VERSION` follows semantic versioning; `api.describe()` returns the
 full catalogue as JSON-ready data).
 
@@ -87,10 +88,9 @@ construction marker lines highlights`; strokes go on `construction`,
 - Unknown fields, out-of-range values, wrong point counts or wrong layers
   raise `InvalidStrokeError` (the message names the stroke and the field).
 
-## Through the FreeCAD MCP server
+## Examples
 
-With [freecad-mcp](https://github.com/neka-nat/freecad-mcp), an agent can
-draw on a sheet of the document open in FreeCAD (`execute_code`):
+Draw on a sheet of the open document (macro or Python console):
 
 ```python
 from freecad.croquis import api
@@ -101,10 +101,10 @@ api.add_strokes(s["name"], [
     {"tool": "spline", "points": [[30, 150], [120, 60], [260, 140]], "size": 1.5},
     {"tool": "line", "points": [[30, 180], [270, 180]], "profile": {"tin": 0}},
 ], doc=doc)
-print(api.render_png(s["name"], doc=doc))   # read the PNG back to check the result
+print(api.render_png(s["name"], doc=doc))
 ```
 
-Capture the 3D view and annotate it (GUI, `execute_code`):
+Capture the 3D view and annotate it (GUI):
 
 ```python
 from freecad.croquis import api
@@ -114,7 +114,7 @@ api.add_strokes(res["sheet"]["name"], [
 ], doc=App.ActiveDocument)
 ```
 
-or build a file without any GUI (`execute_code_headless`):
+Build a file without any GUI (`freecadcmd` script):
 
 ```python
 import FreeCAD as App
@@ -127,5 +127,9 @@ api.export_png(s["name"], "/tmp/sketch.png", doc=doc)
 doc.saveAs("/tmp/sketch.FCStd")
 ```
 
-Next step (not done yet): a dedicated MCP server exposing these functions
-as typed tools.
+## Scope
+
+Croquis is a passive workbench: importing it starts nothing, it opens no
+network connection and embeds no server, bridge or AI client. This API is
+plain Python; any script, macro or third-party addon may call it
+(including an MCP addon, for those who want one).

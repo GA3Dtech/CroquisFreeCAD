@@ -131,12 +131,12 @@ them all on FreeCAD 1.1.4, 26.3rc2 and a 27.1 development build, including a che
 written by Croquis opens in a FreeCAD **without the addon**, its image plane
 intact.
 
-## API for agents (MCP)
+## Python API
 
-`freecad.croquis.api` is a stable, headless-safe API (millimetres,
-`#rrggbb` colours, JSON-ready results, typed errors, one undo step per call).
-Full reference: [docs/api.md](docs/api.md). With the FreeCAD MCP server
-(`execute_code`), an agent can draw on an open sheet:
+`freecad.croquis.api` is a stable, documented Python API for scripts,
+macros and other addons (millimetres, `#rrggbb` colours, plain Python
+results, typed errors, one undo step per call). It works in the GUI and in
+`freecadcmd`. Full reference: [docs/api.md](docs/api.md).
 
 ```python
 from freecad.croquis import api
@@ -144,10 +144,11 @@ doc = App.ActiveDocument
 s = api.create_sheet(doc, format="A4L", plane="XZ")
 api.add_strokes(s["name"], [{"tool": "spline", "points": [[30, 150], [120, 60], [260, 140]]}],
                 doc=doc)
-print(api.render_png(s["name"], doc=doc))
+api.export_png(s["name"], "/tmp/sketch.png", doc=doc)
 ```
 
-The same code runs in `freecadcmd` (`execute_code_headless`).
+Croquis is a passive workbench: it runs nothing at startup, opens no
+network connection and contains no server or AI client.
 
 ## Translations
 
@@ -156,6 +157,11 @@ User-facing texts are English in the code and translated through
 Spanish). `python3 tools/i18n.py check` lists missing entries, `update` adds
 them. The language follows FreeCAD or can be forced in
 *Edit > Preferences > Croquis*.
+
+## Development
+
+An AI coding agent is used to write this workbench. Every change goes
+through the test suite and the CI described above.
 
 ## License
 
