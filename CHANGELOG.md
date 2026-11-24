@@ -118,6 +118,9 @@ All notable changes to this project are documented here. The format follows
   the public API.
 
 ### Fixed
+- Cool, warm and neutral greys were hard to tell apart: cool greys now lean
+  clearly to blue and warm greys to yellow / brown; the palette selector
+  shows a colour strip and a tooltip for each family.
 - The "edges" and "wireframe" guide styles really switch shapes to
   wireframe (the display modes were queried with the wrong method, so
   faces stayed shaded).

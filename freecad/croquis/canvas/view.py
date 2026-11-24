@@ -931,6 +931,21 @@ def color_icon(color, size=16):
     return QtGui.QIcon(pix)
 
 
+def palette_icon(colors, w=48, h=14):
+    """Strip of the palette's colours: the tint of a grey family shows at
+    a glance."""
+    pix = QtGui.QPixmap(w, h)
+    pix.fill(QtGui.QColor(0, 0, 0, 0))
+    p = QtGui.QPainter(pix)
+    n = max(1, len(colors))
+    for i, (_label, c) in enumerate(colors):
+        p.fillRect(int(i * w / n), 0, int((i + 1) * w / n) - int(i * w / n), h, QtGui.QColor(c))
+    p.setPen(QtGui.QColor(60, 60, 60))
+    p.drawRect(0, 0, w - 1, h - 1)
+    p.end()
+    return QtGui.QIcon(pix)
+
+
 class SwatchBar(QtWidgets.QWidget):
     """Palette selector and a row of colour swatches."""
 
@@ -943,14 +958,23 @@ class SwatchBar(QtWidgets.QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(2)
         self.combo = QtWidgets.QComboBox()
-        for name, _colors in self.palettes:
-            self.combo.addItem(tr_data(name))
+        for name, colors in self.palettes:
+            self.combo.addItem(palette_icon(colors), tr_data(name))
+            tip = model.PALETTE_TIPS.get(name)
+            if tip:
+                self.combo.setItemData(self.combo.count() - 1, tr_data(tip),
+                                       QtCore.Qt.ToolTipRole)
+        self.combo.setIconSize(QtCore.QSize(48, 14))
         lay.addWidget(self.combo)
         self.row = QtWidgets.QHBoxLayout()
         self.row.setSpacing(1)
         lay.addLayout(self.row)
         self.combo.currentIndexChanged.connect(self._fill)
+        self.combo.currentIndexChanged.connect(self._sync_tip)
         self._fill(0)
+
+    def _sync_tip(self, index):
+        self.combo.setToolTip(self.combo.itemData(index, QtCore.Qt.ToolTipRole) or "")
 
     def _fill(self, index):
         while self.row.count():

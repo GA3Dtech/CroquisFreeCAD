@@ -277,8 +277,14 @@ def layer_blend(key):
 # ----------------------------------------------------------------------
 #  Palettes (resources/palettes/*.json)
 # ----------------------------------------------------------------------
-# Names of the built-in palettes, for translation
+# Names of the built-in palettes, for translation, and what tells them apart
 PALETTE_NAMES = [N_("Cool greys"), N_("Warm greys"), N_("Neutral greys"), N_("Accents")]
+PALETTE_TIPS = {
+    "Cool greys": N_("Cool greys: slightly tinted blue"),
+    "Warm greys": N_("Warm greys: slightly tinted yellow / brown"),
+    "Neutral greys": N_("Neutral greys: no tint"),
+    "Accents": N_("Accent colours"),
+}
 
 PALETTE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "resources", "palettes")

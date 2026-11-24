@@ -264,3 +264,20 @@ def test_text_element():
     sheet = model.SheetData()
     sheet.elements = [e]
     assert model.SheetData.from_json(sheet.to_json()).texts()[0].text == "Hello\nworld"
+
+
+def test_grey_families_visibly_different():
+    pals = dict(model.load_palettes())
+
+    def rgb(c):
+        return int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)
+    for (_lc, c), (_lw, w), (_ln, n) in zip(pals["Cool greys"], pals["Warm greys"],
+                                            pals["Neutral greys"]):
+        cr, cg, cb = rgb(c)
+        wr, wg, wb = rgb(w)
+        nr, ng, nb = rgb(n)
+        assert nr == ng == nb                                  # neutral: no tint
+        assert cb - cr >= 10 and wr - wb >= 10                 # cool blue, warm yellow
+        assert abs((cr + cg + cb) / 3 - nr) < 12               # same lightness family
+    for name in ("Cool greys", "Warm greys", "Neutral greys"):
+        assert name in model.PALETTE_TIPS

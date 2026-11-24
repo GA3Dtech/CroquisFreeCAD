@@ -1,5 +1,5 @@
 {
- "_comment": "Built-in marker palettes. name: English (translated at display). colors: [label, #rrggbb].",
+ "_comment": "Built-in marker palettes. name: English (translated at display). colors: [label, #rrggbb]. Cool greys lean to blue, warm greys to yellow / brown, neutral greys have no tint.",
  "palettes": [
   {
    "order": 1,
@@ -7,43 +7,43 @@
    "colors": [
     [
      "C0",
-     "#eceff3"
+     "#e7eef8"
     ],
     [
      "C1",
-     "#d8dbdf"
+     "#d3dae5"
     ],
     [
      "C2",
-     "#c3c7cc"
+     "#bec6d2"
     ],
     [
      "C3",
-     "#afb3b8"
+     "#a9b1bf"
     ],
     [
      "C4",
-     "#9b9fa5"
+     "#959dac"
     ],
     [
      "C5",
-     "#868b91"
+     "#808998"
     ],
     [
      "C6",
-     "#72777d"
+     "#6c7585"
     ],
     [
      "C7",
-     "#5f6369"
+     "#596270"
     ],
     [
      "C8",
-     "#4b5055"
+     "#464e5b"
     ],
     [
      "C9",
-     "#383c40"
+     "#333a47"
     ]
    ]
   },
@@ -53,43 +53,43 @@
    "colors": [
     [
      "W0",
-     "#f3f0ed"
+     "#f8f3e7"
     ],
     [
      "W1",
-     "#dfddd9"
+     "#e5dfd3"
     ],
     [
      "W2",
-     "#ccc9c4"
+     "#d2cbbe"
     ],
     [
      "W3",
-     "#b8b5b0"
+     "#bfb8a9"
     ],
     [
      "W4",
-     "#a5a19c"
+     "#aca495"
     ],
     [
      "W5",
-     "#918d87"
+     "#989180"
     ],
     [
      "W6",
-     "#7d7a73"
+     "#857d6c"
     ],
     [
      "W7",
-     "#696660"
+     "#706959"
     ],
     [
      "W8",
-     "#55524c"
+     "#5b5446"
     ],
     [
      "W9",
-     "#403e39"
+     "#474033"
     ]
    ]
   },
