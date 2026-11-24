@@ -7,6 +7,8 @@
   "Insert image": "Insertar imagen",
   "Export sheet as PNG": "Exportar la hoja como PNG",
   "PNG image (*.png)": "Imagen PNG (*.png)",
+  "Show / hide the sketches": "Mostrar / ocultar los bocetos",
+  "Show or hide every sketch sheet of the document at once (C, V)": "Muestra u oculta de una vez todas las hojas de boceto del documento (C, V)",
   "The clipboard holds no picture. Copy a screenshot or an image first.": "El portapapeles no contiene ninguna imagen. Copie primero una captura de pantalla o una imagen.",
   "Sketch": "Boceto",
   "Create a sketch sheet and its image plane, and open the drawing board": "Crea una hoja de boceto y su plano de imagen, y abre el tablero de dibujo",

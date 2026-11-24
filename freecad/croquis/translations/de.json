@@ -7,6 +7,8 @@
   "Insert image": "Bild einfügen",
   "Export sheet as PNG": "Blatt als PNG exportieren",
   "PNG image (*.png)": "PNG-Bild (*.png)",
+  "Show / hide the sketches": "Skizzen ein- / ausblenden",
+  "Show or hide every sketch sheet of the document at once (C, V)": "Blendet alle Skizzenblätter des Dokuments auf einmal ein oder aus (C, V)",
   "The clipboard holds no picture. Copy a screenshot or an image first.": "Die Zwischenablage enthält kein Bild. Kopieren Sie zuerst ein Bildschirmfoto oder ein Bild.",
   "Sketch": "Skizze",
   "Create a sketch sheet and its image plane, and open the drawing board": "Erstellt ein Skizzenblatt mit seiner Bildebene und öffnet das Zeichenbrett",

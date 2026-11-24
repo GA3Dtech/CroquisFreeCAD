@@ -203,6 +203,44 @@ def export_png():
                                  + "\n")
 
 
+class _ToggleSheets(object):
+    """Show / hide every sketch of the active document at once. Checkable:
+    the button stays pressed while the sketches are shown."""
+
+    def GetResources(self):
+        return {"Pixmap": icon("ToggleSheets.svg"), "MenuText": tr("Show / hide the sketches"),
+                "ToolTip": tr("Show or hide every sketch sheet of the document at once (C, V)"),
+                "Accel": "C, V", "Checkable": True}
+
+    def Activated(self, checked=None):
+        from . import api
+        try:
+            api.set_sheets_visible(App.ActiveDocument)
+        except Exception as exc:
+            App.Console.PrintError("Croquis: %s\n" % exc)
+        self._sync()
+
+    def _sync(self):
+        """Pressed while the sketches are shown."""
+        from . import api
+        try:
+            state = api.sheets_visible(App.ActiveDocument) is True
+            action = Gui.Command.get("Croquis_ToggleSheets").getAction()
+            for a in action:
+                if a.isChecked() != state:
+                    a.blockSignals(True)
+                    a.setChecked(state)
+                    a.blockSignals(False)
+        except Exception:
+            pass
+
+    def IsActive(self):
+        if App.ActiveDocument is None:
+            return False
+        self._sync()
+        return True
+
+
 # Filled by register(); kept as module lists for init_gui
 TOOLBAR = []
 MENU = []
@@ -240,6 +278,7 @@ def register():
             tr("Save the selected sheet as a PNG image (transparent where the paper is)"),
             needs=_one_sheet)),
     ]
+    cmds.append(("Croquis_ToggleSheets", _ToggleSheets()))
     for name, cmd in cmds:
         Gui.addCommand(name, cmd)
     TOOLBAR[:] = [name for name, _c in cmds]

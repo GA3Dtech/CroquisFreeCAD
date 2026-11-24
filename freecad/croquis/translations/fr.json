@@ -7,6 +7,8 @@
   "Insert image": "Insérer une image",
   "Export sheet as PNG": "Exporter la planche en PNG",
   "PNG image (*.png)": "Image PNG (*.png)",
+  "Show / hide the sketches": "Afficher / masquer les croquis",
+  "Show or hide every sketch sheet of the document at once (C, V)": "Affiche ou masque d'un coup toutes les planches de croquis du document (C, V)",
   "The clipboard holds no picture. Copy a screenshot or an image first.": "Le presse-papiers ne contient pas d'image. Copiez d'abord une capture d'écran ou une image.",
   "Sketch": "Croquis",
   "Create a sketch sheet and its image plane, and open the drawing board": "Crée une planche de croquis et son plan d'image, et ouvre la planche à dessin",

@@ -71,7 +71,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.6.0"
+API_VERSION = "1.7.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -932,6 +932,37 @@ def refresh_underlay(sheet, doc=None):
                             data.layers["underlay"]["opacity"], s.get("hide_sheets", True))
 
 
+def sheets_visible(doc=None):
+    """True when every sheet's image plane is shown, False when none is,
+    None when mixed or when the document has no sheet."""
+    from . import sheet as sheet_mod
+    planes = [o.ImagePlane for o in _doc(doc).Objects
+              if sheet_mod.is_sheet(o) and o.ImagePlane is not None]
+    if not planes:
+        return None
+    shown = [bool(p.Visibility) for p in planes]
+    return True if all(shown) else (False if not any(shown) else None)
+
+
+def set_sheets_visible(doc=None, visible=None):
+    """Show or hide the image planes of every sheet of the document at once
+    (visible=None: toggle, hiding when all are shown). Returns the number of
+    sheets changed."""
+    from . import sheet as sheet_mod
+    d = _doc(doc)
+    if visible is None:
+        visible = sheets_visible(d) is not True
+    if not isinstance(visible, bool):
+        raise InvalidArgumentError("visible must be True, False or None")
+    n = 0
+    for o in d.Objects:
+        if sheet_mod.is_sheet(o) and o.ImagePlane is not None \
+                and bool(o.ImagePlane.Visibility) != visible:
+            o.ImagePlane.Visibility = visible
+            n += 1
+    return n
+
+
 def set_scale(sheet, scale=None, segment=None, length_mm=None, doc=None):
     """Size of the sheet in 3D: either `scale` (3D mm per sheet mm), or a
     `segment` [[x1, y1], [x2, y2]] on the sheet (mm) whose real length is
@@ -1013,7 +1044,8 @@ PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper",
           "list_strokes", "add_strokes", "add_arrow", "delete_strokes", "add_image",
           "new_sheet_from_image", "list_images", "update_image_element",
           "delete_image_element", "capture_3d_view", "restore_image_view", "capture_underlay",
-          "refresh_underlay", "clear_underlay", "set_scale", "add_text", "list_texts",
+          "refresh_underlay", "clear_underlay", "set_scale", "sheets_visible",
+          "set_sheets_visible", "add_text", "list_texts",
           "edit_text", "delete_text", "render_png", "export_png", "describe"]
 
 GUI_ONLY = ["capture_3d_view", "restore_image_view", "capture_underlay", "refresh_underlay"]

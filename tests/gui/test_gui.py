@@ -248,3 +248,18 @@ def test_side_panel_cannot_get_lost(board):
     b.set_panel_visible(False)
     sheet.open_board(obj)                           # editing again shows it
     assert b.side.isVisibleTo(b)
+
+
+def test_toggle_sheets_command(doc, croquis_wb):
+    App.setActiveDocument(doc.Name)
+    a = api.create_sheet(doc, "A5L", 72, "white", "XY")
+    api.create_sheet(doc, "A5L", 72, "white", "XZ")
+    cmd = Gui.Command.get("Croquis_ToggleSheets")
+    assert cmd.getInfo()["shortcut"] == "C, V"
+    Gui.runCommand("Croquis_ToggleSheets")
+    process()
+    assert api.sheets_visible(doc) is False
+    assert not doc.getObject(a["image_plane"]).ViewObject.Visibility
+    assert not cmd.getAction()[0].isChecked()               # icon shows the state
+    Gui.runCommand("Croquis_ToggleSheets")
+    assert api.sheets_visible(doc) is True and cmd.getAction()[0].isChecked()

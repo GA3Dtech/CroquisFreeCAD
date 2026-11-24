@@ -263,3 +263,15 @@ def test_camera_plane_needs_gui(doc):
     for kw in ({"plane": "camera"}, {"format": "view"}):
         with pytest.raises(errors.GuiRequiredError):
             api.create_sheet(doc, **kw)
+
+
+def test_sheets_visibility(doc, sheet):
+    other = api.create_sheet(doc, "A5L", 72, "white", "XY")
+    assert api.sheets_visible(doc) is True
+    assert api.set_sheets_visible(doc) == 2 and api.sheets_visible(doc) is False
+    doc.getObject(other["image_plane"]).Visibility = True
+    assert api.sheets_visible(doc) is None                   # mixed
+    assert api.set_sheets_visible(doc) == 1 and api.sheets_visible(doc) is True
+    assert api.set_sheets_visible(doc, False) == 2
+    with pytest.raises(errors.InvalidArgumentError):
+        api.set_sheets_visible(doc, "yes")

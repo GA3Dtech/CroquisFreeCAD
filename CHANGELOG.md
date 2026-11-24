@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- "Show / hide the sketches" (shortcut C, V): one checkable button shows or
+  hides every sketch of the document; it stays pressed while they are
+  shown. API 1.7: `sheets_visible`, `set_sheets_visible`.
+
 ### Changed
 - One way to create sheets: "New sketch sheet" defaults to the size of the
   3D view, in the camera plane at scale, on transparent paper, with a 3D

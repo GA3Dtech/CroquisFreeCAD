@@ -7,6 +7,8 @@
   "Insert image": "Inserisci immagine",
   "Export sheet as PNG": "Esporta il foglio in PNG",
   "PNG image (*.png)": "Immagine PNG (*.png)",
+  "Show / hide the sketches": "Mostra / nascondi gli schizzi",
+  "Show or hide every sketch sheet of the document at once (C, V)": "Mostra o nasconde in un colpo tutti i fogli di schizzo del documento (C, V)",
   "The clipboard holds no picture. Copy a screenshot or an image first.": "Gli appunti non contengono immagini. Copia prima uno screenshot o un'immagine.",
   "Sketch": "Schizzo",
   "Create a sketch sheet and its image plane, and open the drawing board": "Crea un foglio di schizzo e il suo piano immagine, e apre la tavola da disegno",
