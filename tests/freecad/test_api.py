@@ -275,3 +275,19 @@ def test_sheets_visibility(doc, sheet):
     assert api.set_sheets_visible(doc, False) == 2
     with pytest.raises(errors.InvalidArgumentError):
         api.set_sheets_visible(doc, "yes")
+
+
+def test_export_pdf(doc, sheet, tmp_path):
+    import re
+    other = api.create_sheet(doc, "A4P", 72, "white", "XY")
+    api.add_strokes(sheet["name"], ALL_TOOLS, doc=doc)
+    api.add_text(sheet["name"], "PDF", 20, 20, doc=doc)
+    path = api.export_pdf([sheet["name"], other["name"]], str(tmp_path / "s.pdf"), doc=doc)
+    data = open(path, "rb").read()
+    assert data.startswith(b"%PDF") and len(re.findall(rb"/Type\s*/Page(?!s)", data)) == 2
+    assert api.export_pdf(sheet["name"], str(tmp_path / "one.pdf"), dpi=100, doc=doc)
+    for kw in ({"path": ""}, {"dpi": 10}):
+        args = {"path": str(tmp_path / "x.pdf"), "dpi": 300}
+        args.update(kw)
+        with pytest.raises(errors.InvalidArgumentError):
+            api.export_pdf(sheet["name"], doc=doc, **args)

@@ -71,7 +71,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.7.0"
+API_VERSION = "1.8.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -1030,6 +1030,26 @@ def render_png(sheet, path=None, include_underlay=False, dpi=None, doc=None):
     return path
 
 
+def export_pdf(sheets, path, dpi=300, doc=None):
+    """Write one sheet or a list of sheets to a PDF (one page per sheet at
+    its size in mm). Line, spline, arrow strokes and texts are vector
+    graphics; pencil, marker, pictures and paper are pictures at `dpi`;
+    the 3D view guide is never exported. Returns the path."""
+    from . import sheet as sheet_mod
+    from .render import pdf
+    if not isinstance(path, str) or not path:
+        raise InvalidArgumentError("path must be a file name")
+    if isinstance(dpi, bool) or not isinstance(dpi, int) or not 50 <= dpi <= 1200:
+        raise InvalidArgumentError("dpi must be an integer in [50, 1200], got %r" % (dpi,))
+    items = sheets if isinstance(sheets, (list, tuple)) else [sheets]
+    if not items:
+        raise InvalidArgumentError("no sheet given")
+    datas = [sheet_mod.sheet_data(_sheet(s, doc)) for s in items]
+    _ensure_qt()
+    pdf.save_pdf(datas, path, dpi)
+    return path
+
+
 def export_png(sheet, path, dpi=None, doc=None):
     """Write the sheet as a PNG file at `path`. Returns the path."""
     if not isinstance(path, str) or not path:
@@ -1046,7 +1066,7 @@ PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper",
           "delete_image_element", "capture_3d_view", "restore_image_view", "capture_underlay",
           "refresh_underlay", "clear_underlay", "set_scale", "sheets_visible",
           "set_sheets_visible", "add_text", "list_texts",
-          "edit_text", "delete_text", "render_png", "export_png", "describe"]
+          "edit_text", "delete_text", "render_png", "export_png", "export_pdf", "describe"]
 
 GUI_ONLY = ["capture_3d_view", "restore_image_view", "capture_underlay", "refresh_underlay"]
 

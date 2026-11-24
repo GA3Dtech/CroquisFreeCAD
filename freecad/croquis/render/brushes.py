@@ -319,17 +319,27 @@ def render_stroke(stroke, scale, limit=None):
 def draw_arrow_heads(img, origin, stroke, scale):
     """Heads of an arrow stroke, in the stroke's own buffer (full alpha:
     the stroke opacity is applied when the buffer is composited)."""
+    painter = QtGui.QPainter(img)
+    try:
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
+        painter.translate(-origin[0], -origin[1])
+        paint_arrow_heads(painter, stroke, scale)
+    finally:
+        painter.end()
+
+
+def paint_arrow_heads(painter, stroke, scale):
+    """Arrow heads with any painter whose unit is the sheet pixel (stroke
+    buffer, or a PDF page for vector output)."""
     prof = stroke.profile()
     chain = chain_of(stroke)
     if len(chain) < 2:
         return
     length = model.arrow_head_size(stroke.size, prof["head_size"])
     color = QtGui.QColor(stroke.color)
-    painter = QtGui.QPainter(img)
+    painter.save()
     try:
-        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
-        painter.setCompositionMode(QtGui.QPainter.CompositionMode_Source)
-        painter.translate(-origin[0], -origin[1])
         painter.scale(scale, scale)         # geometry in mm
         pen = QtGui.QPen(color, stroke.size, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap,
                          QtCore.Qt.RoundJoin)
@@ -353,4 +363,28 @@ def draw_arrow_heads(img, origin, stroke, scale):
                 painter.setBrush(color)
                 painter.drawEllipse(QtCore.QPointF(cx, cy), radius, radius)
     finally:
-        painter.end()
+        painter.restore()
+
+
+def paint_vector_stroke(painter, stroke, scale):
+    """A vector stroke as vector graphics (PDF): the same tapered segments
+    as on screen, drawn with a painter whose unit is the sheet pixel."""
+    drawn = vector_pseudo_stroke(stroke, scale)
+    params = tool_params(drawn.tool)
+    size_px = drawn.size * scale
+    color = QtGui.QColor(stroke.color)
+    painter.save()
+    try:
+        painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+        pts = drawn.points
+        for a, b in zip(pts, pts[1:]):
+            w = 0.5 * (point_style(a[2], size_px, params)[0] +
+                       point_style(b[2], size_px, params)[0])
+            painter.setPen(QtGui.QPen(color, w, QtCore.Qt.SolidLine, QtCore.Qt.RoundCap,
+                                      QtCore.Qt.RoundJoin))
+            painter.drawLine(QtCore.QPointF(a[0] * scale, a[1] * scale),
+                             QtCore.QPointF(b[0] * scale, b[1] * scale))
+        if stroke.tool == "arrow":
+            paint_arrow_heads(painter, stroke, scale)
+    finally:
+        painter.restore()

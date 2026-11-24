@@ -46,6 +46,8 @@ from freecad.croquis import api
 | `list_images(sheet, doc=None)` | image elements, bottom to top |
 | `update_image_element(sheet, image_id, doc=None, **changes)` | the element (fields `x y w h rotation opacity render locked layer`) |
 | `delete_image_element(sheet, image_id, doc=None)` | metadata |
+| `export_pdf(sheets, path, dpi=300, doc=None)` | path — one sheet or a list, a page per sheet; vector strokes and texts as vectors, the rest as pictures at `dpi`; the guide is never exported |
+| `sheets_visible(doc=None)` / `set_sheets_visible(doc=None, visible=None)` | `True` / `False` / `None` (mixed) / number of sheets changed (`None` toggles) |
 | `capture_3d_view(doc=None, width_px=None, height_px=None, background="current", hide_sheets=True, target_sheet=None, factor=1.0)` | **GUI.** `{"sheet", "image", "camera"}` — picture of the document's 3D view on a new sheet (or `target_sheet`), camera kept |
 | `restore_image_view(sheet, image_id, doc=None)` | **GUI.** the camera; puts the 3D view back where the picture was captured |
 | `add_text(sheet, text, x_mm, y_mm, width_mm=None, size_mm=5.0, color="#1b1b1d", font="Sans Serif", bold=False, italic=False, align="left", frame=False, background=False, leader_to=None, layer="lines", doc=None)` | the text element (`h` computed); `leader_to` [x, y] adds a callout arrow |
@@ -58,7 +60,9 @@ from freecad.croquis import api
 | `export_png(sheet, path, dpi=None, doc=None)` | path |
 | `describe()` | API version, functions, tools, layers, formats, papers, planes |
 
-Formats: `A5L A5P A4L A4P A3L A3P SQ`. Papers: `transparent white layout
+Formats: `A5L A5P A4L A4P A3L A3P SQ`, `custom` (with `width_mm`,
+`height_mm`) and `view` (GUI: proportions of the 3D view). Planes: also
+`camera` (GUI). Papers: `transparent white layout
 grey kraft`. Planes: `XY XZ YZ`. Layers (bottom to top): `underlay
 construction marker lines highlights`; strokes go on `construction`,
 `marker`, `lines` or `highlights`.

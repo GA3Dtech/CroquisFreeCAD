@@ -63,6 +63,7 @@ Requires FreeCAD 1.1 or newer (tested on 1.1.x, 26.3 and the 27.1 development bu
 | **New sheet from clipboard** | Creates a sheet shaped like the picture in the clipboard (screenshot, copied image), with the picture on it, and opens the board. |
 | **Insert image…** | Puts a picture file on the selected sheet. |
 | **Capture 3D view** | Takes a picture of the document's 3D view (resolution, background, sheets hidden) onto a new sheet or the open board, to draw, arrow and write on it; the picture remembers the camera ("Back to this view" in its panel). |
+| **Export sheets as PDF** | Saves the selected sheets as one PDF, a page per sheet; lines, splines, arrows and texts stay vector graphics. |
 | **Export sheet as PNG** | Saves the selected sheet as a PNG (transparent where the paper is transparent). |
 
 The drawing board belongs to the Croquis workbench: switching to another

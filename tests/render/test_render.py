@@ -227,3 +227,60 @@ def test_eraser_does_not_erase_text():
     before = int((render(sheet)[:, :, 3] > 128).sum())
     sheet.strokes = [stroke("eraser", [(0, 15, 1), (80, 15, 1)], size=20)]
     assert int((render(sheet)[:, :, 3] > 128).sum()) == before
+
+
+# ----------------------------------------------------------------------
+#  PDF
+# ----------------------------------------------------------------------
+def _pdf_pages(path):
+    import re
+    data = open(path, "rb").read()
+    assert data.startswith(b"%PDF")
+    return len(re.findall(rb"/Type\s*/Page(?!s)", data))
+
+
+def _render_pdf_page(path, page, dpi=72):
+    try:
+        from PySide6 import QtPdf
+    except ImportError:
+        pytest.skip("QtPdf not available")
+    from PySide6 import QtCore
+    doc = QtPdf.QPdfDocument()
+    doc.load(path)
+    size = doc.pagePointSize(page)
+    img = doc.render(page, QtCore.QSize(int(size.width() * dpi / 72),
+                                        int(size.height() * dpi / 72)))
+    return to_array(img)
+
+
+def test_pdf_pages_vectors_and_guide(tmp_path):
+    from freecad.croquis.render import pdf
+    vec = model.SheetData(150, 100, 150, "white")
+    vec.strokes = [stroke("spline", [(x, y, 1.0) for x, y in __import__(
+        "freecad.croquis.render.stroke_geom", fromlist=["x"]).anchors_to_chain(
+        [(10, 80), (60, 20), (140, 70)])], size=2, params=dict(model.DEFAULT_PROFILE))]
+    mixed = band_sheet("kraft")
+    # a guide that must never reach the PDF
+    guide = tmp_path / "guide.png"
+    from imaging import qt
+    _c, QtGui = qt()
+    black = QtGui.QImage(100, 100, QtGui.QImage.Format_RGB32)
+    black.fill(0)
+    black.save(str(guide))
+    mixed.underlay = {"mode": "plane"}
+    mixed.files[model.SheetData.UNDERLAY_FILE] = str(guide)
+    path = str(tmp_path / "out.pdf")
+    pdf.save_pdf([vec, mixed], path, dpi=150)
+    assert _pdf_pages(path) == 2
+    one = str(tmp_path / "vec.pdf")
+    pdf.save_pdf([vec], one, dpi=150)
+    raw = open(one, "rb").read()
+    import os
+    assert os.path.getsize(one) < 60000          # the spline is vector, not a big picture
+    assert b"/Subtype /Image" in raw             # (only the white paper picture)
+    page = _render_pdf_page(path, 1)
+    corner = page[3, 3, :3]
+    assert abs(int(corner[0]) - 0xc3) < 6 and abs(int(corner[2]) - 0x7a) < 6   # kraft paper
+    assert page[:, :, :3].min(axis=2).mean() > 100                # no black guide
+    spline = _render_pdf_page(path, 0)
+    assert (spline[:, :, 0] < 100).sum() > 50                     # the spline is drawn

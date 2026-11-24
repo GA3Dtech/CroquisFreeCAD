@@ -1057,6 +1057,26 @@ def image_filter():
     return tr("Images ({patterns})").format(patterns=" ".join(exts))
 
 
+def export_pdf_dialog(parent, sheets, default_path):
+    """Ask for a file name and write the sheets (SheetData) as a PDF."""
+    from ..render import pdf
+    base = os.path.splitext(default_path)[0] if default_path else ""
+    path, _flt = QtWidgets.QFileDialog.getSaveFileName(
+        parent, tr("Export as PDF"), base + ".pdf", tr("PDF document (*.pdf)"))
+    if not path:
+        return None
+    if not path.lower().endswith(".pdf"):
+        path += ".pdf"
+    try:
+        pdf.save_pdf(sheets, path)
+    except Exception as exc:
+        QtWidgets.QMessageBox.warning(parent, "Croquis",
+                                      tr("Could not write {path}.").format(path=path)
+                                      + "\n" + str(exc))
+        return None
+    return path
+
+
 def export_png_dialog(parent, sheet, default_path):
     """Ask for a file name and write the sheet as PNG. Returns the path or
     None."""
@@ -1255,6 +1275,9 @@ class SheetBoard(QtWidgets.QWidget):
         a = tb.addAction(QtGui.QIcon(icon("ExportPng.svg")), tr("Export PNG…"))
         a.setToolTip(tr("Save the sheet as a PNG image"))
         a.triggered.connect(lambda: export_png_dialog(self, self.sheet, self.export_path))
+        a = tb.addAction(QtGui.QIcon(icon("ExportPdf.svg")), tr("Export PDF…"))
+        a.setToolTip(tr("Save the sheet as a PDF (lines, splines, arrows and texts as vectors)"))
+        a.triggered.connect(lambda: export_pdf_dialog(self, [self.sheet], self.export_path))
         if self.on_apply is not None:
             a = tb.addAction(tr("Update 3D"))
             a.setToolTip(tr("Write the strokes into the document and refresh the "

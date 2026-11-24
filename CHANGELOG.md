@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- PDF export (board button, "Export sheets as PDF" for the selection, API
+  `export_pdf`): a page per sheet at its size in mm; line, spline and arrow
+  strokes and texts are vector graphics, pencil / marker layers, pictures
+  and paper are high resolution pictures; the 3D guide is never exported.
 - Styled shapes (key O): one drop-down button for circle, ellipse,
   rectangle (Shift: square) and arc, remembering the last one; drawn with
   the last drawing tool (pencil, marker, spline...) with a slight

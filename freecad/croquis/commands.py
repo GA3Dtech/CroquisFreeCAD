@@ -241,6 +241,22 @@ class _ToggleSheets(object):
         return True
 
 
+def export_pdf():
+    """Selected sheets to one PDF, a page per sheet."""
+    import os
+
+    from . import sheet
+    from .canvas.view import export_pdf_dialog
+    objs = selected_sheets()
+    folder = os.path.dirname(objs[0].Document.FileName) if objs[0].Document.FileName \
+        else os.path.expanduser("~")
+    path = export_pdf_dialog(Gui.getMainWindow(), [sheet.sheet_data(o) for o in objs],
+                             os.path.join(folder, objs[0].Label + ".pdf"))
+    if path:
+        App.Console.PrintMessage(tr("Croquis: sheet exported to {path}").format(path=path)
+                                 + "\n")
+
+
 # Filled by register(); kept as module lists for init_gui
 TOOLBAR = []
 MENU = []
@@ -268,6 +284,10 @@ def register():
         ("Croquis_InsertImage", _Command(
             insert_image, "InsertImage.svg", tr("Insert image…"),
             tr("Put a picture file on the selected sheet"), needs=_one_sheet)),
+        ("Croquis_ExportPdf", _Command(
+            export_pdf, "ExportPdf.svg", tr("Export sheets as PDF"),
+            tr("Save the selected sheets as one PDF, a page per sheet (lines, splines, "
+               "arrows and texts as vectors)"), needs=lambda: bool(selected_sheets()))),
         ("Croquis_ShowPanel", _Command(
             lambda: __import__("freecad.croquis.sheet", fromlist=["x"]).show_panels(),
             "Panel.svg", tr("Show the Croquis panel"),
@@ -284,4 +304,5 @@ def register():
     TOOLBAR[:] = [name for name, _c in cmds]
     MENU[:] = list(TOOLBAR)
     TOOLBAR.remove("Croquis_ShowPanel")         # menu only
-    CONTEXT[:] = ["Croquis_EditSheet", "Croquis_InsertImage", "Croquis_ExportPng"]
+    CONTEXT[:] = ["Croquis_EditSheet", "Croquis_InsertImage", "Croquis_ExportPng",
+                  "Croquis_ExportPdf"]
