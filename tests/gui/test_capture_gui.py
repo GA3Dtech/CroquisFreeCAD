@@ -151,7 +151,7 @@ def test_new_sheet_defaults_camera_view_guide(scene):
     doc, view = scene
     m = panels.NewSheetModel(doc)
     for k, v in (("format", "view"), ("plane", "camera"), ("paper", "transparent"),
-                 ("background", "guide"), ("dpi", "72")):
+                 ("background", "guide_edges"), ("dpi", "72")):
         assert m.set(k, v), m.error
     assert m.accept(), m.error
     info = m.created
@@ -170,10 +170,26 @@ def test_new_sheet_defaults_camera_view_guide(scene):
     assert plane[:, :, 3].max() == 0                            # guide never exported
 
 
+def test_new_sheet_shaded_guide(scene):
+    doc, view = scene
+    m = panels.NewSheetModel(doc)
+    for k, v in (("format", "custom"), ("width", 300), ("height", 150), ("plane", "camera"),
+                 ("background", "guide_shaded"), ("dpi", "72")):
+        assert m.set(k, v), m.error
+    assert m.accept(), m.error
+    info = m.created
+    assert (info["width_mm"], info["height_mm"]) == (300, 150)
+    assert info["underlay"]["style"] == "shaded"
+    guide = to_array(load(getattr(doc.getObject(info["name"]), "UnderlayImage")))
+    assert blue_pixels(guide) > 50                               # shaded: the blue faces
+
+
 def test_new_sheet_picture_background(scene):
     doc, view = scene
     m = panels.NewSheetModel(doc, background="picture")
     m.set("dpi", "72")
+    m.set("format", "view")
+    m.set("plane", "camera")
     assert m.accept(), m.error
     imgs = api.list_images(m.created["name"], doc=doc)
     assert len(imgs) == 1 and imgs[0]["camera"] and imgs[0]["x"] == pytest.approx(0, abs=0.01)

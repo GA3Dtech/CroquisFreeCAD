@@ -37,7 +37,10 @@ DEFAULTS = {
     "SheetDpi": 150,
     "SheetPaper": "transparent",    # key of model.PAPERS
     "SheetPlane": "camera",         # camera / XY / XZ / YZ
-    "SheetBackground": "guide",     # none / guide (3D wireframe, not exported) / picture
+    "SheetBackground": "guide_edges",  # none / guide_edges / guide_wireframe /
+                                       # guide_shaded (3D guide, not exported) / picture
+    "SheetWidth": 300.0,            # custom size, mm
+    "SheetHeight": 200.0,
     "PressureCurve": 1.0,           # exponent applied to tablet pressure
     "MouseSpeedPressure": True,     # mouse: fast stroke = thinner, lighter
     "Smoothing": 4,                 # input stabilizer, 0 = raw input

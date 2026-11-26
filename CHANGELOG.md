@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- New sheet: "Custom size" format with width and height in mm (remembered),
+  and the 3D guide background in three styles: black edges on white,
+  wireframe, shaded.
+
 ### Fixed
 - Sheets with a scale other than 1 (camera orientation, A3 and other
   formats, scale tool) got a 3D guide framed on the unscaled sheet: what was

@@ -11,8 +11,9 @@ pytestmark = pytest.mark.freecad
 
 def test_new_sheet_model_creates_through_api(doc):
     m = panels.new_sheet_model(doc)
-    assert [p.name for p in m.params] == ["label", "format", "dpi", "paper", "plane",
-                                         "background"]
+    assert [p.name for p in m.params] == ["label", "format", "width", "height", "dpi",
+                                         "paper", "plane", "background"]
+    assert set(m.hidden()) >= {"width", "height"}             # only for a custom size
     for name, value in (("label", "Front"), ("format", "A3P"), ("dpi", "72"),
                         ("paper", "kraft"), ("plane", "YZ"), ("background", "none")):
         assert m.set(name, value), m.error
@@ -25,6 +26,19 @@ def test_new_sheet_model_creates_through_api(doc):
     assert api.list_sheets(doc)[0]["name"] == info["name"]
     assert doc.UndoCount == count + 1
     assert prefs.get("SheetFormat") == "A3P" and prefs.get("SheetDpi") == 72
+
+
+def test_new_sheet_custom_size(doc):
+    m = panels.new_sheet_model(doc)
+    for name, value in (("format", "custom"), ("width", 640), ("height", 125.5), ("dpi", "72"),
+                        ("plane", "XY"), ("background", "none")):
+        assert m.set(name, value), m.error
+    assert "width" not in m.hidden()
+    assert not m.set("width", 2)                              # below the minimum
+    assert m.accept(), m.error
+    assert (m.created["width_mm"], m.created["height_mm"]) == (640, 125.5)
+    assert m.created["format"] == "custom"
+    assert panels.new_sheet_model(doc).v["width"] == 640       # remembered
 
 
 def test_new_sheet_model_reports_errors(doc):
