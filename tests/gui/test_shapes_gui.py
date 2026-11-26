@@ -141,3 +141,23 @@ def test_arc_ends_editable(board):
     sh = c.sheet.strokes[-1].params["shape"]
     assert (sh["x1"], sh["y1"]) == pytest.approx((150, 60), abs=0.5)
     assert (sh["x0"], sh["y0"]) == pytest.approx((30, 80), abs=0.5)
+
+
+def test_arc_radius_editable(board):
+    _obj, b = board
+    c = b.canvas
+    c.set_tool("spline")
+    b.choose_shape("arc")
+    c.tool_settings["shape"]["hand"] = False
+    a, z = c.to_widget((30, 80)), c.to_widget((110, 80))
+    drag(c, [(a.x(), a.y()), (z.x(), z.y())])
+    c.set_tool("edit")
+    top = c.to_widget((70, 80 - 80 / 3))                 # click the arc
+    drag(c, [(top.x(), top.y()), (top.x(), top.y())])
+    deeper = c.to_widget((70, 40))                       # drag its top handle up
+    drag(c, [(top.x(), top.y()), (deeper.x(), deeper.y())])
+    s = c.sheet.strokes[-1]
+    sh = s.params["shape"]
+    assert sh["sag"] == pytest.approx(0.5, abs=0.02)     # 40 mm bulge on an 80 mm chord
+    assert (sh["x0"], sh["x1"]) == pytest.approx((30, 110), abs=0.5)    # ends kept
+    assert min(p[1] for p in s.points) == pytest.approx(40, abs=1.5)

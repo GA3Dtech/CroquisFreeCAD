@@ -911,6 +911,8 @@ class EditTool(Tool):
             painter.setPen(QtGui.QPen(blue, 1.2, QtCore.Qt.DashLine))
             if shape["kind"] == "arc":
                 painter.drawLine(pts[0], pts[1])
+                painter.drawLine(QtCore.QPointF((pts[0].x() + pts[1].x()) / 2,
+                                                (pts[0].y() + pts[1].y()) / 2), pts[2])
             else:
                 painter.drawPolygon(QtGui.QPolygonF(pts))
             painter.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255), 1))
@@ -982,7 +984,7 @@ def shape_stroke(brush, color, size, opacity, params, shape):
     t = model.TOOLS[brush]
     kind = shape["kind"]
     chain = geom.shape_chain(kind, shape["x0"], shape["y0"], shape["x1"], shape["y1"],
-                             shape.get("constrain", False))
+                             shape.get("constrain", False), shape.get("sag"))
     if shape.get("hand"):
         chain = geom.hand_drawn(chain, kind != "arc", seed=shape.get("seed", 1))
     if t["kind"] == "vector":
@@ -1005,9 +1007,15 @@ def reshape(stroke, shape):
 
 def shape_handles(shape):
     """Handles of a shape in mm: [(name, (x, y))]: the four corners of its
-    box, or the two ends of an arc."""
+    box, or the two ends of an arc and its top (radius)."""
     if shape["kind"] == "arc":
-        return [("a", (shape["x0"], shape["y0"])), ("b", (shape["x1"], shape["y1"]))]
+        x0, y0, x1, y1 = shape["x0"], shape["y0"], shape["x1"], shape["y1"]
+        (nx, ny), chord = geom.arc_normal(x0, y0, x1, y1)
+        ratio = shape.get("sag")
+        if ratio is None:
+            ratio = 0.5 if shape.get("constrain") else 1.0 / 3.0
+        mid = ((x0 + x1) / 2.0 + nx * chord * ratio, (y0 + y1) / 2.0 + ny * chord * ratio)
+        return [("a", (x0, y0)), ("b", (x1, y1)), ("mid", mid)]
     x0, y0, x1, y1 = geom.shape_box(shape["kind"], shape["x0"], shape["y0"], shape["x1"],
                                     shape["y1"], shape.get("constrain", False))
     return [("tl", (x0, y0)), ("tr", (x1, y0)), ("br", (x1, y1)), ("bl", (x0, y1))]
@@ -1021,6 +1029,13 @@ def moved_shape(shape, handle, dx, dy, x, y):
             s[k] += dx
         for k in ("y0", "y1"):
             s[k] += dy
+    elif handle == "mid":
+        # the top of the arc follows the pen: bulge = distance to the chord
+        (nx, ny), chord = geom.arc_normal(s["x0"], s["y0"], s["x1"], s["y1"])
+        if chord > 1e-9:
+            mx, my = (s["x0"] + s["x1"]) / 2.0, (s["y0"] + s["y1"]) / 2.0
+            s["sag"] = ((x - mx) * nx + (y - my) * ny) / chord
+            s["constrain"] = False
     elif handle == "a":
         s["x0"], s["y0"] = x, y
     elif handle == "b":

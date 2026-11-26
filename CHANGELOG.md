@@ -10,6 +10,8 @@ All notable changes to this project are documented here. The format follows
 - New sheet: "Custom size" format with width and height in mm (remembered),
   and the 3D guide background in three styles: black edges on white,
   wireframe, shaded.
+- The radius of an arc can be changed with the edit tool: drag the handle
+  at its top (also to the other side); its ends stay in place.
 
 ### Fixed
 - Sheets with a scale other than 1 (camera orientation, A3 and other

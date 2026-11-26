@@ -462,18 +462,32 @@ def shape_box(kind, x0, y0, x1, y1, constrain):
     return min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1)
 
 
-def shape_chain(kind, x0, y0, x1, y1, constrain=False):
+def arc_normal(x0, y0, x1, y1):
+    """Unit normal of an arc's chord, on the side it bulges by default
+    (left of the chord, upwards on screen), and the chord length."""
+    dx, dy = x1 - x0, y1 - y0
+    chord = math.hypot(dx, dy)
+    if chord < 1e-9:
+        return (0.0, -1.0), 0.0
+    return (dy / chord, -dx / chord), chord
+
+
+def shape_chain(kind, x0, y0, x1, y1, constrain=False, sag=None):
     """Bezier chain of a shape dragged from (x0, y0) to (x1, y1):
     circle / ellipse / rect inscribed in the box (closed, starting at the
     top), arc from the press to the release point, bulging by a third of
-    the chord (constrain: a half circle)."""
+    the chord (constrain: a half circle; sag: the bulge as a share of the
+    chord, negative to the other side, which sets the radius)."""
     if kind == "arc":
-        dx, dy = x1 - x0, y1 - y0
-        chord = math.hypot(dx, dy)
+        (nx, ny), chord = arc_normal(x0, y0, x1, y1)
         if chord < 1e-9:
             return line_chain(x0, y0, x1, y1)
-        nx, ny = dy / chord, -dx / chord             # left of the chord, upwards on screen
-        sag = chord / 2.0 if constrain else chord / 3.0
+        ratio = sag if sag is not None else (0.5 if constrain else 1.0 / 3.0)
+        if abs(ratio) < 0.01:
+            return line_chain(x0, y0, x1, y1)
+        if ratio < 0:
+            nx, ny, ratio = -nx, -ny, -ratio
+        sag = chord * ratio
         r = (chord * chord / 4.0 + sag * sag) / (2.0 * sag)
         mx, my = (x0 + x1) / 2.0, (y0 + y1) / 2.0
         cx, cy = mx + nx * (sag - r), my + ny * (sag - r)

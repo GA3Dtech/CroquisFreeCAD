@@ -255,3 +255,13 @@ def test_hand_drawn_is_small_deterministic_and_overshoots():
     for p, q in zip(chain, a):
         assert math.hypot(p[0] - q[0], p[1] - q[1]) < 0.012 * 40 * 3
     assert g.hand_drawn(chain, True, amount=0) == chain
+
+
+def test_arc_sag_sets_radius_and_side():
+    deep = chain_points(g.shape_chain("arc", 0, 0, 40, 0, sag=0.5))
+    assert min(y for _x, y, _t in deep) == pytest.approx(-20, abs=0.05)     # half circle
+    flat = chain_points(g.shape_chain("arc", 0, 0, 40, 0, sag=0.1))
+    assert min(y for _x, y, _t in flat) == pytest.approx(-4, abs=0.05)
+    other = chain_points(g.shape_chain("arc", 0, 0, 40, 0, sag=-0.25))
+    assert max(y for _x, y, _t in other) == pytest.approx(10, abs=0.05)     # other side
+    assert len(g.shape_chain("arc", 0, 0, 40, 0, sag=0.0)) == 4             # straight
