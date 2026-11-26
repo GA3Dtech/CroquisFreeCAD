@@ -210,7 +210,9 @@ class SheetCanvas(QtWidgets.QWidget):
         self.handler = tools.make_tool(self, self.tool)
         self.zoom = 1.0
         self.offset = QtCore.QPointF(0, 0)
-        self._fitted = False
+        # the sheet stays fitted to the window (opening, tab resized) until
+        # the user zooms or pans
+        self.auto_fit = True
         self._checker = _checker_brush()
         self._live_img = None
         self.editor = None          # TextEditor while a text box is typed
@@ -278,6 +280,7 @@ class SheetCanvas(QtWidgets.QWidget):
 
     def set_zoom(self, z, anchor=None):
         """Zoom keeping the sheet point under `anchor` (widget pos) fixed."""
+        self.auto_fit = False
         if anchor is None:
             anchor = QtCore.QPointF(self.width() / 2.0, self.height() / 2.0)
         z = min(max(z, ZOOM_MIN), ZOOM_MAX)
@@ -757,9 +760,14 @@ class SheetCanvas(QtWidgets.QWidget):
 
     def resizeEvent(self, event):
         QtWidgets.QWidget.resizeEvent(self, event)
-        if not self._fitted and self.width() > 50 and self.height() > 50:
-            self._fitted = True
+        if self.auto_fit and self.width() > 50 and self.height() > 50:
             self.fit()
+
+    def showEvent(self, event):
+        QtWidgets.QWidget.showEvent(self, event)
+        if self.auto_fit:       # once the tab has its final size
+            QtCore.QTimer.singleShot(0, lambda: self.auto_fit and self.width() > 50 and
+                                     self.fit())
 
     # ------------------------------------------------------------------
     #  Tablet
@@ -854,6 +862,7 @@ class SheetCanvas(QtWidgets.QWidget):
         self._update_hover(None)
 
     def _pan_to(self, pos):
+        self.auto_fit = False
         d = pos - self._pan
         self._pan = pos
         self.offset = self.offset + d

@@ -263,3 +263,25 @@ def test_toggle_sheets_command(doc, croquis_wb):
     assert not cmd.getAction()[0].isChecked()               # icon shows the state
     Gui.runCommand("Croquis_ToggleSheets")
     assert api.sheets_visible(doc) is True and cmd.getAction()[0].isChecked()
+
+
+def test_sheet_fitted_until_the_user_zooms(board):
+    _obj, b = board
+    c = b.canvas
+
+    def fits():
+        r = c.sheet_rect_widget()
+        return r.left() >= 0 and r.top() >= 0 and r.right() <= c.width() + 1 and \
+            r.bottom() <= c.height() + 1 and (r.width() > c.width() - 60 or
+                                              r.height() > c.height() - 60)
+    for size in ((900, 600), (1400, 1000), (700, 900)):
+        b.window().resize(*size)
+        process()
+        assert fits(), size
+    c.set_zoom(c.zoom * 2)                          # the user zooms: no more auto fit
+    zoom = c.zoom
+    b.window().resize(1000, 700)
+    process()
+    assert c.zoom == zoom
+    c.fit()                                         # F still fits
+    assert fits()
