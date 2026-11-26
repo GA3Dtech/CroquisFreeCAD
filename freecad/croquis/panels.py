@@ -438,6 +438,51 @@ def guide_model(board):
     return GuideModel(board)
 
 
+class ResizeModel(PanelModel):
+    """Grow (or shrink) the board's sheet on its sides. OK only checks and
+    keeps the margins in `margins`: the board applies them (it has to be
+    written and opened again around the change)."""
+
+    SIDES = ("left", "right", "top", "bottom")
+
+    def __init__(self, board):
+        self.board = board
+        self.v = dict((k, 0.0) for k in self.SIDES)
+        self.margins = None
+
+        def field(name):
+            return (lambda: self.v[name]), (lambda value: self.v.__setitem__(name, value))
+        labels = {"left": tr("Left:"), "right": tr("Right:"), "top": tr("Top:"),
+                  "bottom": tr("Bottom:")}
+        params = [Param(k, labels[k], "number", *field(k), min=-5000, max=5000, step=10,
+                        decimals=1, unit="mm", tip=tr("Added on this side (negative: cut off)"))
+                  for k in self.SIDES]
+        PanelModel.__init__(self, tr("Sheet size"), params, hint=self._hint)
+
+    def new_size(self):
+        sh = self.board.sheet
+        return (sh.width + self.v["left"] + self.v["right"],
+                sh.height + self.v["top"] + self.v["bottom"])
+
+    def _hint(self):
+        w, h = self.new_size()
+        return tr("New size: {w} x {h} mm. The drawing keeps its place on the paper and "
+                  "in 3D.").format(w="%g" % round(w, 1), h="%g" % round(h, 1))
+
+    def accept(self):
+        w, h = self.new_size()
+        if w < 10 or h < 10:
+            self.error = tr("The sheet would be smaller than 10 mm.")
+            return False
+        if any(abs(v) > 1e-9 for v in self.v.values()):
+            self.margins = dict(self.v)
+        return True
+
+
+def resize_model(board):
+    return ResizeModel(board)
+
+
 
 # ----------------------------------------------------------------------
 #  Text boxes

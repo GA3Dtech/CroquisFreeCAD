@@ -71,7 +71,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.8.0"
+API_VERSION = "1.9.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -963,6 +963,47 @@ def set_sheets_visible(doc=None, visible=None):
     return n
 
 
+def resize_sheet(sheet, left=0.0, right=0.0, top=0.0, bottom=0.0, doc=None):
+    """Grow (or shrink, with negative values) the sheet on its sides, in mm
+    of the sheet. Strokes, pictures, texts and shapes keep their place on
+    the paper and in 3D: the image plane is moved accordingly. A 3D guide no
+    longer fits: it is captured again in the GUI, removed in freecadcmd.
+    Returns the metadata."""
+    from . import sheet as sheet_mod
+    obj = _sheet(sheet, doc)
+    lf, rt = _num(left, "left"), _num(right, "right")
+    tp, bt = _num(top, "top"), _num(bottom, "bottom")
+    data0 = sheet_mod.sheet_data(obj)
+    if data0.width + lf + rt < 10 or data0.height + tp + bt < 10:
+        raise InvalidArgumentError("the sheet would be smaller than 10 mm")
+    had_guide = data0.underlay is not None
+    k = float(getattr(obj, "Scale", 1.0) or 1.0)
+    _ensure_qt()
+
+    def run():
+        data = sheet_mod.sheet_data(obj)
+        data.extend(lf, rt, tp, bt)
+        if had_guide:                   # stretched over the new size it would lie
+            data.underlay = None
+            data.files.pop(model.SheetData.UNDERLAY_FILE, None)
+        img = obj.ImagePlane
+        if img is not None:
+            plc = img.Placement
+            # the plane is centred on its base: move it by half the growth
+            shift = plc.Rotation.multVec(App.Vector((rt - lf) / 2.0 * k, (tp - bt) / 2.0 * k, 0))
+            img.Placement = App.Placement(plc.Base + shift, plc.Rotation)
+        sheet_mod.write(obj, data)      # sizes the plane from the new sheet size
+    _transaction(obj.Document, tr("Edit sketch sheet"), run)
+    if had_guide and App.GuiUp:
+        old = data0.underlay
+        try:
+            capture_underlay(obj, old.get("mode", "plane"), old.get("style", "edges"),
+                             data0.layers["underlay"]["opacity"], old.get("hide_sheets", True))
+        except Exception as exc:
+            App.Console.PrintWarning("Croquis: 3D guide not captured again (%s)\n" % exc)
+    return _sheet_info(obj)
+
+
 def set_scale(sheet, scale=None, segment=None, length_mm=None, doc=None):
     """Size of the sheet in 3D: either `scale` (3D mm per sheet mm), or a
     `segment` [[x1, y1], [x2, y2]] on the sheet (mm) whose real length is
@@ -1064,7 +1105,7 @@ PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper",
           "list_strokes", "add_strokes", "add_arrow", "delete_strokes", "add_image",
           "new_sheet_from_image", "list_images", "update_image_element",
           "delete_image_element", "capture_3d_view", "restore_image_view", "capture_underlay",
-          "refresh_underlay", "clear_underlay", "set_scale", "sheets_visible",
+          "refresh_underlay", "clear_underlay", "set_scale", "resize_sheet", "sheets_visible",
           "set_sheets_visible", "add_text", "list_texts",
           "edit_text", "delete_text", "render_png", "export_png", "export_pdf", "describe"]
 

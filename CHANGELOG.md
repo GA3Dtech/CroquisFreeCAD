@@ -12,6 +12,9 @@ All notable changes to this project are documented here. The format follows
   wireframe, shaded.
 - The radius of an arc can be changed with the edit tool: drag the handle
   at its top (also to the other side); its ends stay in place.
+- *Sheet size…* on the board enlarges (or trims) the sheet on any side
+  afterwards; strokes, pictures and texts keep their place on the paper and
+  in 3D, and a 3D guide is captured again. API 1.9.0: `resize_sheet`.
 
 ### Fixed
 - Sheets with a scale other than 1 (camera orientation, A3 and other

@@ -619,6 +619,31 @@ class SheetData(object):
         s = self.scale
         return max(1, int(round(self.width * s))), max(1, int(round(self.height * s)))
 
+    def extend(self, left=0.0, right=0.0, top=0.0, bottom=0.0):
+        """Grow (or, with negative values, shrink) the sheet on its sides,
+        in mm. The content keeps its place on the paper: everything moves
+        by (left, top) in sheet coordinates."""
+        dx, dy = float(left), float(top)
+        self.width += dx + float(right)
+        self.height += dy + float(bottom)
+        for s in self.strokes:
+            s.points = [(p[0] + dx, p[1] + dy, p[2]) for p in s.points]
+            shape = s.params.get("shape") if isinstance(s.params, dict) else None
+            if shape:
+                shape = dict(shape)
+                shape["x0"] += dx
+                shape["x1"] += dx
+                shape["y0"] += dy
+                shape["y1"] += dy
+                s.params = dict(s.params)
+                s.params["shape"] = shape
+        for e in self.elements:
+            if hasattr(e, "x") and hasattr(e, "y"):
+                e.x += dx
+                e.y += dy
+            if getattr(e, "leader", None):
+                e.leader = [e.leader[0] + dx, e.leader[1] + dy]
+
     def images(self):
         return [e for e in self.elements if e.kind == "image"]
 

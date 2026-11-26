@@ -122,6 +122,10 @@ taper and end taper (0 % blunt, 100 % pointed).
 | Middle button drag, or `Space` + drag | Pan |
 | `F` | Fit the sheet in the window |
 
+*Sheet size…* on the board adds room on any side of the sheet afterwards
+(in mm, negative values trim it): the drawing stays where it is on the
+paper and in 3D.
+
 The side panel sets the paper and the visibility and opacity of each layer
 (Highlights, Lines, Marker, Construction, top to bottom).
 

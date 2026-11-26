@@ -281,3 +281,23 @@ def test_grey_families_visibly_different():
         assert abs((cr + cg + cb) / 3 - nr) < 12               # same lightness family
     for name in ("Cool greys", "Warm greys", "Neutral greys"):
         assert name in model.PALETTE_TIPS
+
+
+def test_extend_keeps_content_on_the_paper():
+    sh = model.SheetData(width=100, height=50)
+    sh.strokes.append(model.Stroke("pencil", "#000000", 1, 1, "construction",
+                                   [(10.0, 20.0, 0.5)]))
+    sh.strokes.append(model.Stroke("line", "#000000", 1, 1, "lines", [(1.0, 2.0, 0.0)],
+                                   {"shape": {"kind": "rect", "x0": 1, "y0": 2, "x1": 3,
+                                              "y1": 4}}))
+    sh.elements.append(model.ImageElement("i", "f", 5, 6, 10, 10))
+    sh.elements.append(model.TextElement("t", "x", 7, 8, leader=[9, 10]))
+    sh.extend(left=30, right=5, top=-4, bottom=20)
+    assert (sh.width, sh.height) == (135, 66)
+    assert sh.strokes[0].points == [(40.0, 16.0, 0.5)]
+    shape = sh.strokes[1].params["shape"]
+    assert (shape["x0"], shape["y0"], shape["x1"], shape["y1"]) == (31, -2, 33, 0)
+    img, txt = sh.elements
+    assert (img.x, img.y, txt.x, txt.y, txt.leader) == (35, 2, 37, 4, [39, 6])
+    sh2 = model.SheetData.from_json(sh.to_json())
+    assert sh2.strokes[0].points == [(40.0, 16.0, 0.5)]

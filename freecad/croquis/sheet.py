@@ -374,9 +374,11 @@ def write(obj, data):
         size_plane(obj)
     sync_files(obj, data)
     obj.SheetData = data.to_json()
+    # the size after the render: update_image compares the plane with the
+    # former size to detect a manual scaling
+    update_image(obj, data)
     obj.SheetWidth = data.width
     obj.SheetHeight = data.height
-    update_image(obj, data)
 
 
 def store(obj, data):
@@ -505,6 +507,21 @@ def board_of(obj):
         return sub.widget() if sub is not None else None
     except RuntimeError:
         return None
+
+
+def resize_from_board(doc, name, margins):
+    """'Sheet size…' of a board: write and close the board, resize the
+    sheet (api.resize_sheet), open the board again."""
+    from . import api
+    obj = doc.getObject(name) if doc is not None else None
+    if obj is None:
+        return None
+    close_board(obj, save=True)
+    try:
+        api.resize_sheet(obj, doc=doc, **margins)
+    finally:
+        board = open_board(obj)
+    return board
 
 
 def close_board(obj, save=True):

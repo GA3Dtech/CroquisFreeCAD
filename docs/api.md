@@ -53,6 +53,7 @@ from freecad.croquis import api
 | `add_text(sheet, text, x_mm, y_mm, width_mm=None, size_mm=5.0, color="#1b1b1d", font="Sans Serif", bold=False, italic=False, align="left", frame=False, background=False, leader_to=None, layer="lines", doc=None)` | the text element (`h` computed); `leader_to` [x, y] adds a callout arrow |
 | `list_texts(sheet, doc=None)` / `edit_text(sheet, text_id, doc=None, **changes)` / `delete_text(sheet, text_id, doc=None)` | elements / element / metadata |
 | `set_scale(sheet, scale=None, segment=None, length_mm=None, doc=None)` | metadata — 3D size of the sheet, from a value or a segment of known real length |
+| `resize_sheet(sheet, left=0.0, right=0.0, top=0.0, bottom=0.0, doc=None)` | metadata — grows the sheet on its sides (mm, negative shrinks); the content keeps its place on the paper and in 3D, a guide is captured again (GUI) or removed |
 | `capture_underlay(sheet, mode="plane", style="edges", opacity=0.4, hide_sheets=True, doc=None)` | **GUI.** metadata — 3D view guide along the sheet's normal, true size, never exported (`style`: edges, wireframe, shaded) |
 | `refresh_underlay(sheet, doc=None)` | **GUI.** metadata — captured again with the stored settings |
 | `clear_underlay(sheet, doc=None)` | metadata |

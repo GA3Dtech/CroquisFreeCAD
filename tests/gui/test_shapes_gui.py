@@ -161,3 +161,28 @@ def test_arc_radius_editable(board):
     assert sh["sag"] == pytest.approx(0.5, abs=0.02)     # 40 mm bulge on an 80 mm chord
     assert (sh["x0"], sh["x1"]) == pytest.approx((30, 110), abs=0.5)    # ends kept
     assert min(p[1] for p in s.points) == pytest.approx(40, abs=1.5)
+
+
+def test_sheet_resized_from_the_board(board):
+    from freecad.croquis import panels
+    obj, b = board
+    c = b.canvas
+    c.set_tool("spline")
+    b.choose_shape("rect")
+    c.tool_settings["shape"]["hand"] = False
+    a, z = c.to_widget((30, 40)), c.to_widget((90, 80))
+    drag(c, [(a.x(), a.y()), (z.x(), z.y())])           # not applied yet: written on resize
+    m = panels.resize_model(b)
+    assert m.set("left", 40) and m.set("bottom", 25)
+    assert "250 x 173" in m.hint_text()
+    assert m.accept() and m.margins["left"] == 40
+    m2 = panels.resize_model(b)
+    m2.set("left", -205)
+    assert not m2.accept() and m2.error
+    b2 = sheet.resize_from_board(obj.Document, obj.Name, m.margins)
+    process()
+    assert b2 is not b and b2.sheet.width == 250 and b2.sheet.height == 173
+    shape = b2.sheet.strokes[-1].params["shape"]
+    assert (shape["x0"], shape["y0"]) == pytest.approx((70, 40), abs=0.5)
+    assert api.get_sheet(obj.Name, doc=obj.Document)["width_mm"] == 250
+    sheet.close_board(obj)

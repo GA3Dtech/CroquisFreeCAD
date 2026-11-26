@@ -1287,6 +1287,11 @@ class SheetBoard(QtWidgets.QWidget):
         a.setToolTip(tr("Trace over the model: a true-size view along the sheet's normal, "
                         "under the strokes, never exported"))
         a.triggered.connect(self.guide_3d)
+        if self.on_apply is not None:
+            a = tb.addAction(tr("Sheet size…"))
+            a.setToolTip(tr("Enlarge the sheet on one side or another; the drawing keeps "
+                            "its place"))
+            a.triggered.connect(self.resize_sheet)
         a = tb.addAction(QtGui.QIcon(icon("ExportPng.svg")), tr("Export PNG…"))
         a.setToolTip(tr("Save the sheet as a PNG image"))
         a.triggered.connect(lambda: export_png_dialog(self, self.sheet, self.export_path))
@@ -1389,6 +1394,19 @@ class SheetBoard(QtWidgets.QWidget):
     def guide_3d(self):
         from .. import panels, qml_host
         qml_host.run_dialog(panels.guide_model(self), parent=self)
+
+    def resize_sheet(self):
+        """Sheet size panel; the change goes through the document (board
+        written, sheet resized as one undo step, board opened again)."""
+        from .. import panels, qml_host
+        m = panels.resize_model(self)
+        if not qml_host.run_dialog(m, parent=self) or not m.margins:
+            return
+        from .. import sheet as sheet_mod
+        doc = self.canvas.document()
+        name = self.sheet_name
+        # after the dialog is gone: the board itself closes
+        QtCore.QTimer.singleShot(0, lambda: sheet_mod.resize_from_board(doc, name, m.margins))
 
     def capture_3d(self):
         from .. import panels, qml_host

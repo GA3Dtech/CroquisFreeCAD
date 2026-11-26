@@ -291,3 +291,37 @@ def test_export_pdf(doc, sheet, tmp_path):
         args.update(kw)
         with pytest.raises(errors.InvalidArgumentError):
             api.export_pdf(sheet["name"], doc=doc, **args)
+
+
+@pytest.mark.parametrize("plane", ["XY", "XZ", "YZ"])
+def test_resize_sheet_keeps_content_in_place(doc, plane):
+    s = api.create_sheet(doc, format="A5L", dpi=72, paper="white", plane=plane)
+    n = s["name"]
+    api.set_scale(n, 2.0, doc=doc)
+    api.add_strokes(n, [{"tool": "line", "points": [[50, 40], [120, 90]]}], doc=doc)
+    api.add_text(n, "Note", 20, 30, leader_to=[150, 120], doc=doc)
+    img = doc.getObject(s["image_plane"])
+
+    def to_3d(x, y, w, h):
+        return img.Placement.multVec(App.Vector((x - w / 2.0) * 2.0, (h / 2.0 - y) * 2.0, 0))
+
+    before = to_3d(50, 40, 210, 148)
+    count = doc.UndoCount
+    info = api.resize_sheet(n, left=30, right=10, top=20, bottom=-8, doc=doc)
+    assert doc.UndoCount == count + 1
+    assert (info["width_mm"], info["height_mm"]) == (250, 160)
+    assert img.XSize.Value == pytest.approx(500) and img.YSize.Value == pytest.approx(320)
+    assert info["scale"] == pytest.approx(2.0)
+    p = api.list_strokes(n, doc=doc)[0]["bezier"][0]
+    assert p == pytest.approx([80, 60])
+    assert (to_3d(p[0], p[1], 250, 160) - before).Length < 1e-6
+    t = api.list_texts(n, doc=doc)[0]
+    assert (t["x"], t["y"], t["leader"]) == (50, 50, [180, 140])
+    doc.undo()
+    info = api.get_sheet(n, doc=doc)
+    assert (info["width_mm"], info["height_mm"]) == (210, 148)
+    assert (to_3d(50, 40, 210, 148) - before).Length < 1e-6
+    with pytest.raises(errors.InvalidArgumentError):
+        api.resize_sheet(n, left=-205, doc=doc)
+    with pytest.raises(errors.InvalidArgumentError):
+        api.resize_sheet(n, top="x", doc=doc)
