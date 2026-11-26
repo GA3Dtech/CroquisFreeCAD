@@ -39,8 +39,9 @@ def guide_array(doc, info):
     return to_array(load(getattr(obj, model.SheetData.UNDERLAY_FILE)))
 
 
+@pytest.mark.parametrize("scale", [1.0, 2.0])
 @pytest.mark.parametrize("plane", list(CASES))
-def test_guide_alignment_round_trip(doc, plane):
+def test_guide_alignment_round_trip(doc, plane, scale):
     base, uv = CASES[plane]
     box = doc.addObject("Part::Box", "Box")
     box.Length = box.Width = box.Height = 20
@@ -51,6 +52,7 @@ def test_guide_alignment_round_trip(doc, plane):
     view.viewIsometric()
     before = view.getCamera()
     info = api.create_sheet(doc, "A4L", DPI, "white", plane)
+    api.set_scale(info["name"], scale, doc=doc)
     res = api.capture_underlay(info["name"], style="edges", doc=doc)
     assert res["underlay"]["mode"] == "plane"
     assert camera_core(view.getCamera()) == camera_core(before)    # user camera restored
@@ -62,15 +64,16 @@ def test_guide_alignment_round_trip(doc, plane):
     assert len(xs) > 100, "no edge captured"
     # the box footprint covers u in [30, 50], v in [10, 30] on the plane
     u0, v0 = uv(base)
-    exp = {"x0": (W / 2 + u0) * s, "x1": (W / 2 + u0 + 20) * s,
-           "y0": (H / 2 - v0 - 20) * s, "y1": (H / 2 - v0) * s}
+    k = scale                     # 3D mm per sheet mm
+    exp = {"x0": (W / 2 + u0 / k) * s, "x1": (W / 2 + (u0 + 20) / k) * s,
+           "y0": (H / 2 - (v0 + 20) / k) * s, "y1": (H / 2 - v0 / k) * s}
     got = {"x0": xs.min(), "x1": xs.max(), "y0": ys.min(), "y1": ys.max()}
-    for k in exp:
-        assert abs(got[k] - exp[k]) <= 3, (plane, k, got[k], exp[k])
+    for key in exp:
+        assert abs(got[key] - exp[key]) <= 3, (plane, scale, key, got[key], exp[key])
     # back to 3D through the image plane placement: the corner of the box
     plc = doc.getObject(info["image_plane"]).Placement
     sx, sy = got["x0"] / s, got["y1"] / s                   # sheet mm of the corner
-    p3 = plc.multVec(App.Vector(sx - W / 2, H / 2 - sy, 0))
+    p3 = plc.multVec(App.Vector((sx - W / 2) * k, (H / 2 - sy) * k, 0))
     assert uv(p3) == pytest.approx((u0, v0), abs=0.5)
 
 

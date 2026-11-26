@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Sheets with a scale other than 1 (camera orientation, A3 and other
+  formats, scale tool) got a 3D guide framed on the unscaled sheet: what was
+  traced over it came out too big in the 3D view (about x2 for an A3 on the
+  camera plane). The guide now frames the image plane as it is in 3D.
+
 ## [0.3.0] - 2026-11-24
 
 ### Fixed

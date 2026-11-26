@@ -264,7 +264,10 @@ def capture_plane(obj, data, style="edges", hide_sheets=True, max_px=3000):
     user = view.getCamera()
     try:
         with HiddenObjects(hidden), DrawStyle(doc, style):
-            view.setCamera(plane_camera(obj.ImagePlane.Placement, data.width, data.height))
+            # frame the image plane as it is in 3D: sheet size x Scale
+            k = float(getattr(obj, "Scale", 1.0) or 1.0)
+            view.setCamera(plane_camera(obj.ImagePlane.Placement, data.width * k,
+                                        data.height * k))
             img = grab(view, w_px, h_px, "white" if style == "edges" else "current")
     finally:
         view.setCamera(user)
