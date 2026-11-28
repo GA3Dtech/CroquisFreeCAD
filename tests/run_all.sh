@@ -6,7 +6,7 @@
 #
 # FREECAD_APPIMAGE   FreeCAD AppImage to use, or the AppRun of an extracted
 #                    AppImage (CI: no FUSE on the runners)
-#                    (default ~/Appimages/FreeCAD_26.3rc1-Linux-x86_64.AppImage)
+#                    (default ~/Appimages/FreeCAD_26.3rc3-Linux-x86_64.AppImage)
 # CROQUIS_WORK       work folder (default: a new temporary folder); keep the
 #                    same one for "freecad" then "vanilla" so the vanilla
 #                    tests also open the files written by the FreeCAD tests
@@ -16,7 +16,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LEVEL="${1:-all}"
-APPIMAGE="${FREECAD_APPIMAGE:-$HOME/Appimages/FreeCAD_26.3rc1-Linux-x86_64.AppImage}"
+APPIMAGE="${FREECAD_APPIMAGE:-$HOME/Appimages/FreeCAD_26.3rc3-Linux-x86_64.AppImage}"
 PYTHON="${PYTHON:-$( [ -x "$ROOT/.venv/bin/python" ] && echo "$ROOT/.venv/bin/python" || echo python3)}"
 WORK="${CROQUIS_WORK:-$(mktemp -d -t croquis-tests-XXXXXX)}"
 export CROQUIS_ARTIFACTS="${CROQUIS_ARTIFACTS:-$WORK/artifacts}"

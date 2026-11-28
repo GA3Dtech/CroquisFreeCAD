@@ -15,6 +15,10 @@ All notable changes to this project are documented here. The format follows
 - *Sheet size…* on the board enlarges (or trims) the sheet on any side
   afterwards; strokes, pictures and texts keep their place on the paper and
   in 3D, and a 3D guide is captured again. API 1.9.0: `resize_sheet`.
+- *Sketch on a face*: click a face of the model (or select it first) and a
+  transparent sheet is laid on it, framed on the face, facing out, up as
+  seen on screen, board open: annotate anything in a click. A curved face
+  gets the tangent plane at the click. API 1.10.0: `create_sheet_on_face`.
 
 ### Fixed
 - Sheets with a scale other than 1 (camera orientation, A3 and other

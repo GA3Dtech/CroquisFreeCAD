@@ -325,3 +325,48 @@ def test_resize_sheet_keeps_content_in_place(doc, plane):
         api.resize_sheet(n, left=-205, doc=doc)
     with pytest.raises(errors.InvalidArgumentError):
         api.resize_sheet(n, top="x", doc=doc)
+
+
+def test_sheet_on_face(doc):
+    import Part  # noqa: F401
+    box = doc.addObject("Part::Box", "Box")
+    box.Length, box.Width, box.Height = 100, 60, 40
+    box.Placement = App.Placement(App.Vector(10, 20, 30), App.Rotation(App.Vector(0, 0, 1), 30))
+    cyl = doc.addObject("Part::Cylinder", "Cyl")
+    cyl.Radius, cyl.Height = 20, 80
+    cyl.Placement.Base = App.Vector(300, 0, 0)
+    doc.recompute()
+    for i, f in enumerate(box.Shape.Faces):
+        name = "Face%d" % (i + 1)
+        info = api.create_sheet_on_face(box, name, dpi=72, doc=doc)
+        assert info["paper"] == "transparent"
+        img = doc.getObject(info["image_plane"])
+        n = img.Placement.Rotation.multVec(App.Vector(0, 0, 1))
+        c = f.CenterOfMass
+        assert (n - f.normalAt(0, 0)).Length < 1e-6                 # facing out
+        h = (img.Placement.Base - c).dot(n)
+        assert 0 < h < 1                                            # a hair above
+        # every corner of the face lies on the sheet, the sheet is not much larger
+        x = img.Placement.Rotation.multVec(App.Vector(1, 0, 0))
+        y = img.Placement.Rotation.multVec(App.Vector(0, 1, 0))
+        for v in f.Vertexes:
+            d = v.Point - img.Placement.Base
+            assert abs(d.dot(x)) < img.XSize.Value / 2 and abs(d.dot(y)) < img.YSize.Value / 2
+        assert max(img.XSize.Value, img.YSize.Value) < 1.2 * max(f.BoundBox.DiagonalLength, 1)
+        assert info["scale"] == pytest.approx(img.XSize.Value / info["width_mm"])
+    # vertical face: up on the sheet is up in the world
+    side = api.create_sheet_on_face(box, "Face1", dpi=72, doc=doc)
+    y = doc.getObject(side["image_plane"]).Placement.Rotation.multVec(App.Vector(0, 1, 0))
+    assert (y - App.Vector(0, 0, 1)).Length < 1e-6
+    # curved face: tangent plane at the picked point
+    info = api.create_sheet_on_face("Cyl", "Face1", point=[300, -20, 50], up=[0, 0, 1],
+                                    dpi=72, doc=doc)
+    img = doc.getObject(info["image_plane"])
+    n = img.Placement.Rotation.multVec(App.Vector(0, 0, 1))
+    assert (n - App.Vector(0, -1, 0)).Length < 1e-6
+    assert img.Placement.Base.y < -20
+    for bad in (("Box", "Edge1"), ("Box", "Face99"), ("Nope", "Face1")):
+        with pytest.raises(errors.InvalidArgumentError):
+            api.create_sheet_on_face(bad[0], bad[1], doc=doc)
+    with pytest.raises(errors.InvalidArgumentError):
+        api.create_sheet_on_face("Box", "Face1", point="x", doc=doc)

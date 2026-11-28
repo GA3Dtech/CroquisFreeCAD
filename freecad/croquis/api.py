@@ -71,7 +71,7 @@ from .errors import (
 )
 from .i18n import tr
 
-API_VERSION = "1.9.0"
+API_VERSION = "1.10.0"
 
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -377,6 +377,49 @@ def create_sheet(doc=None, format="A4L", dpi=150, paper="transparent", plane="XZ
     obj = _transaction(d, tr("New sketch sheet"), run)
     d.recompute()
     return _sheet_info(obj)
+
+
+def create_sheet_on_face(obj, face, point=None, up=None, dpi=150, label=None, doc=None):
+    """New sheet lying on a face of the model, to annotate it: on the face's
+    plane (the tangent plane at `point` for a curved face), facing outwards,
+    a hair above it, framed on the face with a margin, transparent paper,
+    scaled to the face's real size. obj: object (or name) holding the face,
+    face: "Face3", or a full sub-name through containers ("Body.Pad.Face3");
+    point: picked point [x, y, z] (global mm); up: [x, y, z] that should
+    read as up on the sheet (default global Z). Returns the metadata."""
+    from . import face as face_mod
+    from . import sheet as sheet_mod
+    d = _doc(doc)
+    target = d.getObject(obj) if isinstance(obj, str) else obj
+    if target is None or not hasattr(target, "Name"):
+        raise InvalidArgumentError("no object %r" % (obj,))
+    if isinstance(dpi, bool) or not isinstance(dpi, int) or not 10 <= dpi <= 1200:
+        raise InvalidArgumentError("dpi must be an integer in [10, 1200], got %r" % (dpi,))
+
+    def vec(value, name):
+        if value is None:
+            return None
+        try:
+            return App.Vector(*[_num(c, name) for c in value])
+        except (TypeError, ValueError):
+            raise InvalidArgumentError("%s must be [x, y, z]" % name)
+    try:
+        f = face_mod.face_shape(target, face)
+        placement, size, scale = face_mod.face_frame(f, vec(point, "point"), vec(up, "up"))
+    except face_mod.FaceError as exc:
+        raise InvalidArgumentError(str(exc))
+    _ensure_qt()
+
+    def run():
+        o = sheet_mod.create_sheet(d, "custom", dpi, "transparent", "XY",
+                                   label or tr("Note on {name}").format(name=target.Label),
+                                   size=size)
+        o.ImagePlane.Placement = placement
+        o.Scale = scale
+        return o
+    o = _transaction(d, tr("New sketch sheet"), run)
+    d.recompute()
+    return _sheet_info(o)
 
 
 def get_sheet(sheet, doc=None):
@@ -1106,7 +1149,7 @@ PUBLIC = ["list_sheets", "create_sheet", "get_sheet", "regenerate", "set_paper",
           "new_sheet_from_image", "list_images", "update_image_element",
           "delete_image_element", "capture_3d_view", "restore_image_view", "capture_underlay",
           "refresh_underlay", "clear_underlay", "set_scale", "resize_sheet", "sheets_visible",
-          "set_sheets_visible", "add_text", "list_texts",
+          "set_sheets_visible", "create_sheet_on_face", "add_text", "list_texts",
           "edit_text", "delete_text", "render_png", "export_png", "export_pdf", "describe"]
 
 GUI_ONLY = ["capture_3d_view", "restore_image_view", "capture_underlay", "refresh_underlay"]

@@ -176,6 +176,102 @@ def capture_3d_view():
     sheet.open_board(obj)
 
 
+# ----------------------------------------------------------------------
+#  Sketch on a face
+# ----------------------------------------------------------------------
+def _picked_faces():
+    """(object, full sub-name, picked point or None) of the faces in the
+    selection, through containers (top-level objects)."""
+    out = []
+    for sel in Gui.Selection.getSelectionEx("", 0):
+        pts = list(getattr(sel, "PickedPoints", []) or [])
+        for i, sub in enumerate(sel.SubElementNames):
+            if sub.split(".")[-1].startswith("Face"):
+                pt = pts[i] if i < len(pts) else None
+                out.append((sel.Object, sub, pt))
+    return out
+
+
+def _camera_up(doc):
+    try:
+        view = Gui.getDocument(doc.Name).ActiveView
+        return view.getCameraOrientation().multVec(App.Vector(0, 1, 0))
+    except Exception:
+        return None
+
+
+def sheet_on_face_of(obj, sub, point=None):
+    """New sheet on a face (api.create_sheet_on_face), board open."""
+    from . import api, prefs, sheet
+    doc = obj.Document
+    up = _camera_up(doc)
+    res = api.create_sheet_on_face(
+        obj, sub, point=None if point is None else [point.x, point.y, point.z],
+        up=None if up is None else [up.x, up.y, up.z], dpi=int(prefs.get("SheetDpi")), doc=doc)
+    target = doc.getObject(res["name"])
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(target)
+    return sheet.open_board(target)
+
+
+class _FacePicker(object):
+    """Waits for a click on a face of the 3D view, then lays a sheet on it.
+    Running the command again cancels."""
+
+    def __init__(self):
+        self.active = False
+
+    def start(self):
+        Gui.Selection.clearSelection()
+        Gui.Selection.addObserver(self)
+        self.active = True
+        _status(tr("Croquis: click a face to sketch on it (the command again cancels)"))
+
+    def stop(self, message=""):
+        if self.active:
+            Gui.Selection.removeObserver(self)
+            self.active = False
+        _status(message)
+
+    def addSelection(self, doc, obj, sub, pnt):
+        if sub and sub.split(".")[-1].startswith("Face"):
+            from .qt import QtCore
+            QtCore.QTimer.singleShot(0, self.take)     # not inside the observer call
+
+    def take(self):
+        faces = _picked_faces()
+        if not self.active or not faces:
+            return
+        self.stop()
+        try:
+            sheet_on_face_of(*faces[0])
+        except Exception as exc:
+            App.Console.PrintError("Croquis: %s\n" % exc)
+
+
+_picker = _FacePicker()
+
+
+def _status(text):
+    try:
+        Gui.getMainWindow().statusBar().showMessage(text, 0 if text else 1)
+    except Exception:
+        pass
+
+
+def sheet_on_face():
+    """A face selected: sheet on it at once. Otherwise wait for a click on
+    a face (again: cancel)."""
+    if _picker.active:
+        _picker.stop()
+        return
+    faces = _picked_faces()
+    if faces:
+        sheet_on_face_of(*faces[0])
+    else:
+        _picker.start()
+
+
 def edit_sheet():
     from . import sheet
     for obj in selected_sheets():
@@ -281,6 +377,10 @@ def register():
         ("Croquis_Capture3D", _Command(
             capture_3d_view, "Capture3D.svg", tr("Capture 3D view"),
             tr("Picture of the 3D view on a sheet, to draw, arrow and write on it"))),
+        ("Croquis_SheetOnFace", _Command(
+            sheet_on_face, "SheetOnFace.svg", tr("Sketch on a face"),
+            tr("Click a face of the model (or select it first): a transparent sheet is laid "
+               "on it, framed and facing out, to annotate it"))),
         ("Croquis_InsertImage", _Command(
             insert_image, "InsertImage.svg", tr("Insert image…"),
             tr("Put a picture file on the selected sheet"), needs=_one_sheet)),

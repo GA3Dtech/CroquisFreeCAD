@@ -33,6 +33,7 @@ from freecad.croquis import api
 |---|---|
 | `list_sheets(doc=None)` | list of sheet metadata |
 | `create_sheet(doc=None, format="A4L", dpi=150, paper="transparent", plane="XZ", placement=None, label=None, width_mm=None, height_mm=None)` | metadata of the new sheet (`format="custom"` with `width_mm`, `height_mm`) |
+| `create_sheet_on_face(obj, face, point=None, up=None, dpi=150, label=None, doc=None)` | metadata of a new transparent sheet laid on a face of the model (`face` "Face3" or a full sub-name through containers), framed on it, facing out, a hair above it, at the face's real size; `point` [x, y, z] sets the tangent plane of a curved face, `up` [x, y, z] what reads as up on the sheet (default global Z) |
 | `get_sheet(sheet, doc=None)` | metadata: name, label, format, size in mm, dpi, paper, plane, image plane name, stroke counts, layers |
 | `list_strokes(sheet, layer=None, doc=None)` | strokes in drawing order (stroke format + `index`, `kind`) |
 | `add_strokes(sheet, strokes, doc=None)` | `{"indices": [...], "sheet": metadata}` — all strokes are validated before anything changes |
