@@ -19,6 +19,13 @@ All notable changes to this project are documented here. The format follows
   transparent sheet is laid on it, framed on the face, facing out, up as
   seen on screen, board open: annotate anything in a click. A curved face
   gets the tangent plane at the click. API 1.10.0: `create_sheet_on_face`.
+  It comes with a shaded 3D guide of the face under the strokes
+  (preference: shaded, wireframe, edges or none).
+- Live 3D: the image plane follows the board a moment after each change
+  (strokes, undo, paper, layers), without an undo step per stroke; the
+  document is still written when the board closes, on *Update 3D*, and now
+  also when the document is saved (Save As included). Preference to turn
+  it off.
 
 ### Fixed
 - Sheets with a scale other than 1 (camera orientation, A3 and other

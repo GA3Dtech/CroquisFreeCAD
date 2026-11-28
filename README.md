@@ -70,7 +70,7 @@ Requires FreeCAD 1.1 or newer (tested on 1.1.x, 26.3 and the 27.1 development bu
 | **New sketch sheet** | Choose a format, resolution, paper and plane; creates a `Croquis` sheet and its image plane, and opens the drawing board. |
 | **Edit sketch sheet** | Reopens the drawing board of the selected sheet (or double-click the sheet in the tree, from any workbench). |
 | **New sheet from clipboard** | Creates a sheet shaped like the picture in the clipboard (screenshot, copied image), with the picture on it, and opens the board. |
-| **Sketch on a face** | Click a face of the model (or select it first): a transparent sheet is laid on it, framed on the face, facing out, up as seen on screen, and the board opens. Ideal to annotate a part; on a curved face the sheet takes the tangent plane at the click. |
+| **Sketch on a face** | Click a face of the model (or select it first): a transparent sheet is laid on it, framed on the face, facing out, up as seen on screen, with a shaded 3D guide of the face under the strokes, and the board opens. Ideal to annotate a part; on a curved face the sheet takes the tangent plane at the click. |
 | **Insert image…** | Puts a picture file on the selected sheet. |
 | **Capture 3D view** | Takes a picture of the document's 3D view (resolution, background, sheets hidden) onto a new sheet or the open board, to draw, arrow and write on it; the picture remembers the camera ("Back to this view" in its panel). |
 | **Export sheets as PDF** | Saves the selected sheets as one PDF, a page per sheet; lines, splines, arrows and texts stay vector graphics. |
@@ -131,8 +131,11 @@ paper and in 3D.
 The side panel sets the paper and the visibility and opacity of each layer
 (Highlights, Lines, Marker, Construction, top to bottom).
 
-Closing the board (or *Update 3D*) writes the strokes into the document and
-regenerates the image plane, as one undo step in FreeCAD.
+The 3D view follows the board live: a moment after each change the image
+plane shows the drawing (display only, no undo step per stroke). Closing
+the board, *Update 3D* or saving the document writes the strokes into the
+document and regenerates the image plane, as one undo step in FreeCAD.
+Live update can be turned off in *Edit > Preferences > Croquis*.
 
 ## Tests
 

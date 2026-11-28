@@ -321,6 +321,40 @@ def update_image(obj, data):
             pass
 
 
+PREVIEW_MAX_PX = 2500     # long side of the live 3D preview texture
+
+
+def preview_image(obj, data):
+    """Live 3D: show `data` on the sheet's image plane by replacing its
+    texture in the 3D view only. Nothing changes in the document (no undo
+    step, no file): the next write() loads the real picture."""
+    img = obj.ImagePlane
+    if img is None or not App.GuiUp:
+        return False
+    from pivy import coin
+
+    from .qt import QtGui
+    from .render import compositor
+    long_px = max(data.width, data.height) / 25.4 * data.dpi
+    dpi = data.dpi if long_px <= PREVIEW_MAX_PX else data.dpi * PREVIEW_MAX_PX / long_px
+    q = compositor.render_sheet(data, dpi=dpi)
+    # Coin images start at the bottom row
+    q = q.convertToFormat(QtGui.QImage.Format_RGBA8888).mirrored(False, True)
+    bits = q.constBits()
+    if hasattr(bits, "setsize"):
+        bits.setsize(q.sizeInBytes())
+    raw = bytes(bits)
+    search = coin.SoSearchAction()
+    search.setType(coin.SoTexture2.getClassTypeId())
+    search.setInterest(coin.SoSearchAction.ALL)
+    search.setSearchingAll(True)
+    search.apply(img.ViewObject.RootNode)
+    paths = search.getPaths()
+    for i in range(paths.getLength()):
+        paths[i].getTail().image.setValue(coin.SbVec2s(q.width(), q.height()), 4, raw)
+    return paths.getLength() > 0
+
+
 def adopt_manual_scale(obj):
     """The image plane was scaled by hand (XSize no longer matches the
     sheet width x Scale): keep that scale instead of resetting it."""
@@ -458,8 +492,17 @@ def open_board(obj):
 
     export_dir = os.path.dirname(obj.Document.FileName) if obj.Document.FileName \
         else os.path.expanduser("~")
+    def preview(board):
+        doc = App.getDocument(doc_name) if doc_name in App.listDocuments() else None
+        target = doc.getObject(obj_name) if doc is not None else None
+        if target is not None:
+            preview_image(target, board.sheet)
+
+    from . import prefs
+    _watch_saves()
     board = SheetBoard(sheet_data(obj), "%s - Croquis" % obj.Label, on_apply=apply,
-                       export_path=os.path.join(export_dir, obj.Label + ".png"))
+                       export_path=os.path.join(export_dir, obj.Label + ".png"),
+                       on_preview=preview if prefs.get("LiveUpdate") else None)
     board.canvas.doc_name = doc_name
     board.sheet_name = obj_name
     sub = mdi.addSubWindow(board)
@@ -471,6 +514,78 @@ def open_board(obj):
     mdi.setActiveSubWindow(sub)
     board.canvas.setFocus()
     return board
+
+
+class _SaveObserver(object):
+    """Saving a document first writes its open boards into it: what the 3D
+    view shows (live preview) is what goes into the file. A plain save
+    writes them before; a Save As cannot (FreeCAD moves the document's
+    files meanwhile): they are written right after and saved again."""
+
+    def __init__(self):
+        self.pending = set()
+
+    @staticmethod
+    def _modified_boards(doc_name):
+        out = []
+        for (name, _obj), sub in list(_boards.items()):
+            try:
+                if name == doc_name and sub.widget().is_modified():
+                    out.append(sub.widget())
+            except RuntimeError:
+                pass
+        return out
+
+    def _apply(self, boards):
+        for board in boards:
+            try:
+                board.apply()
+            except Exception as exc:
+                App.Console.PrintError("Croquis: sheet not saved (%s)\n" % exc)
+
+    @staticmethod
+    def _files_writable(doc, board):
+        obj = doc.getObject(board.sheet_name)
+        img = getattr(obj, "ImagePlane", None) if obj is not None else None
+        path = getattr(img, "ImageFile", "") if img is not None else ""
+        return not path or os.path.isdir(os.path.dirname(path))
+
+    def slotStartSaveDocument(self, doc, filename):
+        boards = self._modified_boards(doc.Name)
+        if not boards:
+            return
+        # during a Save As the folder of the included files is being moved:
+        # writing a picture would fail
+        if all(self._files_writable(doc, b) for b in boards):
+            self._apply(boards)
+        else:
+            self.pending.add(doc.Name)
+
+    def slotFinishSaveDocument(self, doc, filename):
+        if doc.Name not in self.pending:
+            return
+        self.pending.discard(doc.Name)
+        name = doc.Name
+
+        def later():
+            if name not in App.listDocuments():
+                return
+            boards = self._modified_boards(name)
+            if boards:
+                self._apply(boards)
+                App.getDocument(name).save()
+        from .qt import QtCore
+        QtCore.QTimer.singleShot(0, later)
+
+
+_save_observer = None
+
+
+def _watch_saves():
+    global _save_observer
+    if _save_observer is None:
+        _save_observer = _SaveObserver()
+        App.addDocumentObserver(_save_observer)
 
 
 def active_board():

@@ -1114,9 +1114,19 @@ class SheetBoard(QtWidgets.QWidget):
     "Update 3D" and closing); `export_path` is the default file name of the
     PNG export."""
 
-    def __init__(self, sheet, title, on_apply=None, export_path="", parent=None):
+    PREVIEW_DELAY_MS = 400      # pause after a change before the 3D preview
+
+    def __init__(self, sheet, title, on_apply=None, export_path="", parent=None,
+                 on_preview=None):
         QtWidgets.QWidget.__init__(self, parent)
         self.on_apply = on_apply
+        # live 3D: called with the board a moment after each change (the
+        # image plane shows the strokes; the document is written on apply)
+        self.on_preview = on_preview
+        self._preview_timer = QtCore.QTimer(self)
+        self._preview_timer.setSingleShot(True)
+        self._preview_timer.setInterval(self.PREVIEW_DELAY_MS)
+        self._preview_timer.timeout.connect(self.preview)
         self.export_path = export_path
         self._edited = False        # paper / layer changes (not in the undo stack)
         self.setWindowTitle(title)
@@ -1172,6 +1182,8 @@ class SheetBoard(QtWidgets.QWidget):
         c.zoomChanged.connect(lambda _z: self._sync_status())
         c.undo_stack.indexChanged.connect(lambda _i: self._sync_status())
         c.sheetEdited.connect(self._on_edited)
+        c.undo_stack.indexChanged.connect(lambda _i: self.schedule_preview())
+        c.sheetEdited.connect(self.schedule_preview)
         self._sync_tool(c.tool)
         self._sync_settings()
         self._sync_status()
@@ -1439,10 +1451,26 @@ class SheetBoard(QtWidgets.QWidget):
             self.canvas.clear_sheet()
 
     # --- document
+    def schedule_preview(self):
+        if self.on_preview is not None:
+            self._preview_timer.start()
+
+    def preview(self):
+        """Show the current drawing in the 3D view (no document change)."""
+        self._preview_timer.stop()
+        if self.on_preview is None:
+            return
+        try:
+            self.on_preview(self)
+        except Exception as exc:
+            import FreeCAD as App
+            App.Console.PrintWarning("Croquis: 3D preview not updated (%s)\n" % exc)
+
     def apply(self):
         """Write the sheet into the document through on_apply."""
         if self.on_apply is None:
             return
+        self._preview_timer.stop()
         self.canvas.cancel_stroke()
         self.on_apply(self)
         self.mark_saved()

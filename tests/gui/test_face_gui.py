@@ -43,7 +43,23 @@ def test_selected_face(doc, box):
     (obj,) = _sheets(doc)
     _check_on_top_face(obj)
     assert sheet.board_of(obj) is not None
-    assert api.get_sheet(obj.Name, doc=doc)["paper"] == "transparent"
+    info = api.get_sheet(obj.Name, doc=doc)
+    assert info["paper"] == "transparent"
+    assert info["underlay"]["style"] == "shaded"     # the face under the strokes
+
+
+def test_face_guide_preference(doc, box):
+    from freecad.croquis import prefs
+    prefs.put("FaceGuide", "none")
+    try:
+        Gui.Selection.clearSelection()
+        Gui.Selection.addSelection(doc.Name, box.Name, "Face6", 50, 30, 40)
+        commands.sheet_on_face()
+        process()
+        (obj,) = _sheets(doc)
+        assert api.get_sheet(obj.Name, doc=doc)["underlay"] is None
+    finally:
+        prefs.put("FaceGuide", "shaded")
 
 
 def test_pick_mode(doc, box):

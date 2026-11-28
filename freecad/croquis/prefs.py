@@ -48,6 +48,8 @@ DEFAULTS = {
     "CaptureFactor": "1",           # 3D view capture: view size x factor
     "CaptureBackground": "current",  # current / white / transparent
     "CaptureHideSheets": True,
+    "LiveUpdate": True,             # the 3D view follows the board after each change
+    "FaceGuide": "shaded",          # Sketch on a face: none / edges / wireframe / shaded
 }
 
 
@@ -158,6 +160,21 @@ class PreferencePage(object):
         f.addRow(tr("Image plane:"), self.plane)
         lay.addWidget(g)
 
+        # --- 3D view
+        g = QtWidgets.QGroupBox(tr("3D view"))
+        f = QtWidgets.QFormLayout(g)
+        self.live = QtWidgets.QCheckBox(tr("Update the 3D view after each change on the board"))
+        self.live.setToolTip(tr("The image plane follows the drawing a moment after each "
+                                "stroke; the document is written when the board closes, on "
+                                "Update 3D and when the document is saved."))
+        f.addRow(self.live)
+        self.face_guide = QtWidgets.QComboBox()
+        for key, label in (("shaded", tr("Shaded")), ("wireframe", tr("Wireframe")),
+                           ("edges", tr("Edges (black on white)")), ("none", tr("None"))):
+            self.face_guide.addItem(label, key)
+        f.addRow(tr("Sketch on a face, 3D guide:"), self.face_guide)
+        lay.addWidget(g)
+
         # --- input
         g = QtWidgets.QGroupBox(tr("Pen input"))
         f = QtWidgets.QFormLayout(g)
@@ -189,6 +206,8 @@ class PreferencePage(object):
         self.curve.setValue(get("PressureCurve"))
         self.speed.setChecked(get("MouseSpeedPressure"))
         self.smoothing.setValue(get("Smoothing"))
+        self.live.setChecked(get("LiveUpdate"))
+        select_data(self.face_guide, get("FaceGuide"))
 
     def saveSettings(self):
         put("Language", self.language.currentData())
@@ -200,6 +219,8 @@ class PreferencePage(object):
         put("PressureCurve", self.curve.value())
         put("MouseSpeedPressure", self.speed.isChecked())
         put("Smoothing", self.smoothing.value())
+        put("LiveUpdate", self.live.isChecked())
+        put("FaceGuide", self.face_guide.currentData())
 
 
 def register():

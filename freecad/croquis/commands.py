@@ -209,6 +209,12 @@ def sheet_on_face_of(obj, sub, point=None):
         obj, sub, point=None if point is None else [point.x, point.y, point.z],
         up=None if up is None else [up.x, up.y, up.z], dpi=int(prefs.get("SheetDpi")), doc=doc)
     target = doc.getObject(res["name"])
+    style = prefs.get("FaceGuide")
+    if style and style != "none":        # the face under the strokes, to trace over it
+        try:
+            api.capture_underlay(target, style=style)
+        except Exception as exc:
+            App.Console.PrintWarning("Croquis: 3D guide not captured (%s)\n" % exc)
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(target)
     return sheet.open_board(target)
