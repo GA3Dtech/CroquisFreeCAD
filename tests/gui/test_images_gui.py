@@ -84,6 +84,7 @@ def test_edit_tool_moves_resizes_rotates_deletes(board):
     c.paste()
     e = b.sheet.images()[0]
     c.set_tool("edit")
+    process(5)              # pending resize / fit events before taking coordinates
     centre = c.to_widget((e.x + e.w / 2, e.y + e.h / 2))
     drag(c, [(centre.x(), centre.y()), (centre.x() + 40, centre.y() + 20)])
     moved = b.sheet.images()[0]

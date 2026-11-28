@@ -36,13 +36,21 @@ def test_typing_keeps_keys_and_escape_validates(board, doc):
     c = b.canvas
     key(c, QtCore.Qt.Key_T)
     assert c.tool == "text" and b.text_panel.isVisibleTo(b)
+    process(10)             # the text panel (QML) finishes loading before typing
     p = c.to_widget((30, 40))
     names = sorted(o.Name for o in doc.Objects)
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(obj)
+    # FreeCAD 1.1 may activate the new document's 3D view tab late, after
+    # the board: bring the board forward again before typing
+    process(10)
+    sheet.open_board(obj)
+    process(10)
     click(c, p.x(), p.y())
     ed = c.editor
-    assert ed is not None and ed.hasFocus()
+    # the focus widget of its window (hasFocus() is False while the test
+    # window is momentarily inactive)
+    assert ed is not None and ed.window().focusWidget() is ed
     QtTest.QTest.keyClicks(ed, "pvme")                      # tool letters
     for k in (QtCore.Qt.Key_Backspace, QtCore.Qt.Key_Delete, QtCore.Qt.Key_1):
         QtTest.QTest.keyClick(ed, k)
@@ -51,6 +59,7 @@ def test_typing_keeps_keys_and_escape_validates(board, doc):
     process()
     assert c.tool == "text"                                 # no tool change
     assert sorted(o.Name for o in doc.Objects) == names     # Delete deleted nothing
+    assert c.editor is ed
     QtTest.QTest.keyClick(ed, QtCore.Qt.Key_Escape)
     process()
     assert c.editor is None
@@ -107,3 +116,38 @@ def test_callout_tip_stays_when_box_moves(board):
     assert c.selected_text() is moved
     b.text_bridge.setValue("italic", True)                   # panel edits the selection
     assert b.sheet.texts()[0].italic
+
+
+def test_editor_survives_switching_window(board):
+    """Another application activated while typing: the text box stays open;
+    focus moved elsewhere on FreeCAD validates it."""
+    QtCore, QtGui, QtWidgets, QtTest = qt()
+    _obj, b = board
+    c = b.canvas
+    key(c, QtCore.Qt.Key_T)
+    p = c.to_widget((30, 40))
+    click(c, p.x(), p.y())
+    ed = c.editor
+    QtTest.QTest.keyClicks(ed, "abc")
+    for reason in (QtCore.Qt.ActiveWindowFocusReason, QtCore.Qt.OtherFocusReason,
+                   QtCore.Qt.PopupFocusReason):
+        QtWidgets.QApplication.sendEvent(ed, QtGui.QFocusEvent(QtCore.QEvent.FocusOut, reason))
+        process()
+        assert c.editor is ed
+    QtWidgets.QApplication.sendEvent(
+        ed, QtGui.QFocusEvent(QtCore.QEvent.FocusOut, QtCore.Qt.MouseFocusReason))
+    process()
+    assert c.editor is None and b.sheet.texts()[-1].text == "abc"
+
+
+def test_text_being_typed_kept_on_close(board, doc):
+    QtCore, _g, _w, QtTest = qt()
+    obj, b = board
+    c = b.canvas
+    key(c, QtCore.Qt.Key_T)
+    p = c.to_widget((30, 40))
+    click(c, p.x(), p.y())
+    QtTest.QTest.keyClicks(c.editor, "unfinished")
+    sheet.close_board(obj)
+    process()
+    assert [t["text"] for t in api.list_texts(obj, doc=doc)] == ["unfinished"]

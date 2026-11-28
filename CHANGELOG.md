@@ -28,6 +28,12 @@ All notable changes to this project are documented here. The format follows
   it off.
 
 ### Fixed
+- Closing a board after drawing printed "Internal C++ object (QTimer)
+  already deleted" errors in the report view (the live 3D preview was
+  scheduled while the board was being deleted).
+- A text box being typed stays open when another window, tab or menu takes
+  the focus, and is no longer lost or validated half-way; closing the
+  board, *Update 3D* or saving the document validates it.
 - Sheets with a scale other than 1 (camera orientation, A3 and other
   formats, scale tool) got a 3D guide framed on the unscaled sheet: what was
   traced over it came out too big in the 3D view (about x2 for an A3 on the

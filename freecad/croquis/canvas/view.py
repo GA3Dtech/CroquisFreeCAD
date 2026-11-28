@@ -186,7 +186,12 @@ class TextEditor(QtWidgets.QPlainTextEdit):
 
     def focusOutEvent(self, event):
         QtWidgets.QPlainTextEdit.focusOutEvent(self, event)
-        if not self.done and event.reason() != QtCore.Qt.PopupFocusReason:
+        # only a click elsewhere (or Tab) validates; a menu, another
+        # window or tab activated keeps the text open (closing the board,
+        # Update 3D and saving validate it through SheetBoard.apply)
+        if not self.done and event.reason() in (QtCore.Qt.MouseFocusReason,
+                                                QtCore.Qt.TabFocusReason,
+                                                QtCore.Qt.BacktabFocusReason):
             QtCore.QTimer.singleShot(0, self.canvas.commit_text)
 
 
@@ -1452,8 +1457,21 @@ class SheetBoard(QtWidgets.QWidget):
 
     # --- document
     def schedule_preview(self):
-        if self.on_preview is not None:
+        if self.on_preview is None:
+            return
+        try:
             self._preview_timer.start()
+        except RuntimeError:        # board being deleted: its timer goes first
+            self.on_preview = None
+
+    def stop_preview(self):
+        """No more live 3D (the board closes: its undo stack still signals
+        while it is deleted, after the timer)."""
+        self.on_preview = None
+        try:
+            self._preview_timer.stop()
+        except RuntimeError:
+            pass
 
     def preview(self):
         """Show the current drawing in the 3D view (no document change)."""
@@ -1471,11 +1489,14 @@ class SheetBoard(QtWidgets.QWidget):
         if self.on_apply is None:
             return
         self._preview_timer.stop()
+        self.canvas.commit_text()
         self.canvas.cancel_stroke()
         self.on_apply(self)
         self.mark_saved()
 
     def closeEvent(self, event):
+        self.stop_preview()
+        self.canvas.commit_text()       # a text being typed is kept
         if self.is_modified():
             try:
                 self.apply()

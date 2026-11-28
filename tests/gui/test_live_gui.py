@@ -117,3 +117,30 @@ def test_save_as_writes_the_boards(doc, board, tmp_path):
         assert len(sheet.sheet_data(other.getObject(board.Name)).strokes) == 1
     finally:
         App.closeDocument(other.Name)
+
+
+def test_closing_the_board_is_quiet(doc, board):
+    """Closing the tab after drawing: no error from the 3D preview once the
+    board is gone (its timer is deleted before the undo stack)."""
+    import sys
+    errors = []
+    old_hook = sys.excepthook
+    sys.excepthook = lambda *exc: errors.append(exc)
+    try:
+        b = sheet.open_board(board)
+        process()
+        b.canvas.fit()
+        _red_stroke(b)
+        tab = b.parentWidget()               # the board's MDI sub-window
+        while tab is not None and not tab.inherits("QMdiSubWindow"):
+            tab = tab.parentWidget()
+        tab.close()                          # the tab's close button
+        QtCore, _g, _w, _t = qt()
+        # the deferred deletion of the tab (processEvents alone skips it)
+        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.DeferredDelete)
+        process(10)
+        wait(600)
+    finally:
+        sys.excepthook = old_hook
+    assert not errors, [str(e[1]) for e in errors]
+    assert len(sheet.sheet_data(board).strokes) == 1
