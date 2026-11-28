@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-28
+
 ### Added
 - New sheet: "Custom size" format with width and height in mm (remembered),
   and the 3D guide background in three styles: black edges on white,
@@ -28,9 +30,6 @@ All notable changes to this project are documented here. The format follows
   it off.
 
 ### Fixed
-- Closing a board after drawing printed "Internal C++ object (QTimer)
-  already deleted" errors in the report view (the live 3D preview was
-  scheduled while the board was being deleted).
 - A text box being typed stays open when another window, tab or menu takes
   the focus, and is no longer lost or validated half-way; closing the
   board, *Update 3D* or saving the document validates it.

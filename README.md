@@ -14,12 +14,12 @@ Two main uses:
 
 1. **Intent sketch before modelling**: draw a side view or a perspective,
    place it on a plane, model over it.
-2. **Overpaint** *(planned, v0.3)*: capture the 3D view, put it under the
+2. **Overpaint**: capture the 3D view, put it under the
    sheet at low opacity, and explore variants with markers on top.
 
 ## Status
 
-Version 0.3.
+Version 0.4.
 
 | Feature | State |
 |---|---|
